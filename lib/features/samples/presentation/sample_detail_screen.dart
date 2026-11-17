@@ -21,6 +21,8 @@ import '../../../core/widgets/status_badge.dart';
 import '../domain/sample.dart';
 import '../../masters/data/masters_repository.dart';
 import 'tasting_screens.dart';
+import '../../../core/widgets/extra_fields.dart';
+import 'sample_form_screen.dart';
 
 class SampleDetailScreen extends ConsumerStatefulWidget {
   const SampleDetailScreen({super.key, required this.sample});
@@ -126,6 +128,7 @@ class _SampleDetailScreenState extends ConsumerState<SampleDetailScreen> {
           ],
         ),
         SampleTastingSection(sample: s),
+        if (extraInfoRows(kSampleExtraFields, s.raw).isNotEmpty) GroupedSection(label: 'More details', children: extraInfoRows(kSampleExtraFields, s.raw)),
         PrimaryButton(label: 'Delete sample', destructive: true, loading: _deleting, onPressed: () => _delete(s)),
       ],
     );

@@ -9,6 +9,7 @@ import '../../../core/utils/json.dart';
 
 class OfferList {
   const OfferList({
+    this.raw = const {},
     required this.id,
     this.date,
     this.gardenId,
@@ -28,6 +29,9 @@ class OfferList {
     this.parties = const [],
     this.buyers = const [],
   });
+
+  /// The record as the API sent it, for fields read through [ExtraField]s.
+  final Map<String, dynamic> raw;
 
   final int id;
   final DateTime? date;
@@ -52,6 +56,7 @@ class OfferList {
   String get title => [gardenName ?? 'Garden #${gardenId ?? '–'}', ?grade].join(' · ');
 
   factory OfferList.fromJson(Map<String, dynamic> j) => OfferList(
+        raw: j,
         id: J.intOr(j['id'], 0),
         date: J.date(j['date']),
         gardenId: J.integer(j['garden_id']),

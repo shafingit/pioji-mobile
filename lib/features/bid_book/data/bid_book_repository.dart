@@ -24,6 +24,7 @@ enum BidStatus {
 
 class Bid {
   const Bid({
+    this.raw = const {},
     required this.id,
     required this.gardenName,
     required this.grade,
@@ -41,6 +42,9 @@ class Bid {
     this.negotiatorName,
     this.remarks,
   });
+
+  /// The record as the API sent it, for fields read through [ExtraField]s.
+  final Map<String, dynamic> raw;
 
   final int id;
   final String gardenName;
@@ -60,6 +64,7 @@ class Bid {
   final String? remarks;
 
   factory Bid.fromJson(Map<String, dynamic> j) => Bid(
+        raw: j,
         id: J.intOr(j['id'], 0),
         gardenName: J.nested(j, 'garden_name', 'garden', 'garden_name') ?? '–',
         grade: J.str(j['grade']) ?? '–',

@@ -25,6 +25,7 @@ import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/bid_book_repository.dart';
 import '../../../core/design/app_icons.dart';
+import '../../../core/widgets/extra_fields.dart';
 
 class BidBookScreen extends StatelessWidget {
   const BidBookScreen({super.key});
@@ -109,6 +110,12 @@ class BidRow extends StatelessWidget {
   }
 }
 
+
+/// Website form fields the API saves (dropdowns load from their own APIs).
+const kBidExtraFields = <ExtraField>[
+  ExtraField('holder_status', 'Place on holder list', ExtraKind.flag),
+];
+
 class BidFormScreen extends ConsumerStatefulWidget {
   const BidFormScreen({super.key, this.editing});
   final Bid? editing;
@@ -118,6 +125,7 @@ class BidFormScreen extends ConsumerStatefulWidget {
 }
 
 class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
+  late final _x = ExtraFieldsController(kBidExtraFields, widget.editing?.raw ?? const {});
   late final Bid? _e = widget.editing;
   late final _garden = TextEditingController(text: _e?.gardenName);
   late final _invoice = TextEditingController(text: _e?.invoiceNumber);
@@ -136,6 +144,7 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
 
   @override
   void dispose() {
+    _x.dispose();
     for (final c in [_garden, _invoice, _pkgs, _net, _incoming, _max, _neg, _pencil, _remarks]) {
       c.dispose();
     }
@@ -144,6 +153,7 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
 
   Future<void> _save() async {
     final body = <String, Object?>{
+      ..._x.body(),
       'garden_name': _garden.text.trim(),
       'grade': _grade,
       'invoice_number': _invoice.text.trim(),
@@ -237,6 +247,7 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
             MasterPickerRow(label: 'Negotiator', provider: negotiatorsProvider, value: _negotiator, placeholder: 'None', onChanged: (n) => setState(() => _negotiator = n), error: err('negotiator_id')),
           ],
         ),
+        ExtraFieldsSection(controller: _x, onChanged: () => setState(() {})),
         GroupedSection(children: [FieldInput(label: 'Remarks', hint: 'High quality orthodox lot', controller: _remarks, maxLines: 3)]),
       ],
     );
@@ -332,6 +343,7 @@ class _BidDetailScreenState extends ConsumerState<BidDetailScreen> {
             ),
           ],
         ),
+        if (extraInfoRows(kBidExtraFields, b.raw).isNotEmpty) GroupedSection(label: 'More details', children: extraInfoRows(kBidExtraFields, b.raw)),
         DeleteRecordButton(
           what: 'lot',
           name: '${b.gardenName} · ${b.grade} (${b.invoiceNumber})',

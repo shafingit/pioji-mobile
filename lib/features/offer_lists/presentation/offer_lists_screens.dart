@@ -24,6 +24,8 @@ import '../../masters/presentation/master_picker.dart';
 import '../data/offer_lists_repository.dart';
 import '../../../core/design/app_icons.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../../core/widgets/extra_fields.dart';
+import '../../../core/utils/json.dart';
 
 class OfferListsScreen extends ConsumerWidget {
   const OfferListsScreen({super.key});
@@ -82,6 +84,13 @@ class OfferListsScreen extends ConsumerWidget {
   }
 }
 
+
+/// Website form fields the API saves (dropdowns load from their own APIs).
+const kOfferExtraFields = <ExtraField>[
+  ExtraField('year', 'Year', ExtraKind.integer, hint: '2026'),
+  ExtraField('center', 'Center', ExtraKind.text, hint: 'Guwahati'),
+];
+
 class OfferFormScreen extends ConsumerStatefulWidget {
   const OfferFormScreen({super.key, this.editing});
 
@@ -93,6 +102,8 @@ class OfferFormScreen extends ConsumerStatefulWidget {
 }
 
 class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubmit {
+  late final _x = ExtraFieldsController(kOfferExtraFields, widget.editing?.raw ?? const {});
+  late String? _invoiceType = J.str(widget.editing?.raw['type']);
   late final OfferList? _e = widget.editing;
   late DateTime _date = _e?.date ?? DateTime.now();
   late DateTime? _packing = _e?.packingDate;
@@ -112,6 +123,7 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
 
   @override
   void dispose() {
+    _x.dispose();
     for (final c in [_prefix, _inv, _pkgs, _nett, _total, _gross, _price, _prompt]) {
       c.dispose();
     }
@@ -130,7 +142,9 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
         'ttl_kgs': Fmt.parse(_total.text),
         'gross_weight': Fmt.parse(_gross.text),
         'd_o_packing': _packing == null ? null : Fmt.api(_packing!),
-        'type': 'Tea',
+        ..._x.body(),
+        // From GET /invoice-types; left out when not chosen.
+        'type': _invoiceType,
         'price': Fmt.parse(_price.text),
         'currency': 'INR',
         'prompt_days': int.tryParse(_prompt.text),
@@ -214,6 +228,10 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
             FieldInput(label: 'Prompt days', hint: '14', controller: _prompt, keyboardType: TextInputType.number, inputFormatters: digitsOnly),
           ],
         ),
+        ExtraFieldsSection(controller: _x, errors: errors, onChanged: () => setState(() {})),
+        GroupedSection(children: [
+          InvoiceTypeRow(value: _invoiceType, error: err('type'), onChanged: (v) => setState(() => _invoiceType = v)),
+        ]),
         GroupedSection(
           label: 'Parties',
           footer: const Text('Pick a buyer or type any name. Up to $_maxParties.'),
@@ -290,6 +308,7 @@ class OfferDetailScreen extends StatelessWidget {
           GroupedSection(label: 'Parties', children: [for (final (i, p) in o.parties.indexed) InfoRow('Party ${i + 1}', p)]),
         if (o.buyers.isNotEmpty)
           GroupedSection(label: 'Allocated buyers', children: [for (final b in o.buyers) InfoRow(b, null)]),
+        if (extraInfoRows(kOfferExtraFields, o.raw).isNotEmpty) GroupedSection(label: 'More details', children: extraInfoRows(kOfferExtraFields, o.raw)),
         DeleteRecordButton(
           what: 'offer',
           name: '${o.title} (${Fmt.invoice(o.invPrefix, o.invNo)})',

@@ -500,3 +500,37 @@ class _PartySheetState extends ConsumerState<_PartySheet> {
     );
   }
 }
+
+/// Invoice type picker; options from `GET /invoice-types`.
+class InvoiceTypeRow extends ConsumerWidget {
+  const InvoiceTypeRow({super.key, required this.value, required this.onChanged, this.error});
+  final String? value;
+  final ValueChanged<String?> onChanged;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final types = ref.watch(invoiceTypesProvider).value ?? const <({String value, String label})>[];
+    String? shown = value;
+    for (final t in types) {
+      if (t.value.toLowerCase() == value?.toLowerCase()) shown = t.label;
+    }
+    return ValueRow(
+      label: 'Invoice type',
+      value: shown,
+      placeholder: 'Not set',
+      error: error,
+      onTap: () async {
+        final list = await ref.read(invoiceTypesProvider.future);
+        if (!context.mounted || list.isEmpty) return;
+        final picked = await showPickerSheet<String>(
+          context,
+          title: 'Invoice type',
+          selected: value,
+          options: [const PickOption('', 'Not set'), for (final t in list) PickOption(t.value, t.label)],
+        );
+        if (picked != null) onChanged(picked.isEmpty ? null : picked);
+      },
+    );
+  }
+}

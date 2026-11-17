@@ -24,6 +24,7 @@ enum SaleStatus {
 
 class SaleEntry {
   const SaleEntry({
+    this.raw = const {},
     required this.id,
     this.buyerId,
     this.buyerName,
@@ -46,6 +47,9 @@ class SaleEntry {
     this.totalQuantity,
     this.totalAmount,
   });
+
+  /// The record as the API sent it, for fields read through [ExtraField]s.
+  final Map<String, dynamic> raw;
 
   final int id;
   final int? buyerId;
@@ -86,6 +90,7 @@ class SaleEntry {
   SaleEntry withSplitFrom(SaleEntry? listCopy) => isSplit || listCopy == null || !listCopy.isSplit
       ? this
       : SaleEntry(
+          raw: raw,
           id: id,
           buyerId: buyerId,
           buyerName: buyerName,
@@ -110,6 +115,7 @@ class SaleEntry {
         );
 
   factory SaleEntry.fromJson(Map<String, dynamic> j) => SaleEntry(
+        raw: j,
         id: J.intOr(j['id'], 0),
         buyerId: J.integer(j['buyer_id']) ?? J.integer((j['buyer'] as Map?)?['id']),
         buyerName: J.nested(j, 'buyer_name', 'buyer', 'buyer_name'),

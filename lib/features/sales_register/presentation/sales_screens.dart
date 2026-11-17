@@ -23,6 +23,7 @@ import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/sales_repository.dart';
 import '../../../core/design/app_icons.dart';
+import '../../../core/widgets/extra_fields.dart';
 
 class SalesListScreen extends StatelessWidget {
   const SalesListScreen({super.key});
@@ -69,6 +70,22 @@ class SalesListScreen extends StatelessWidget {
   }
 }
 
+
+/// Website form fields the API saves (dropdowns load from their own APIs).
+const kSaleExtraFields = <ExtraField>[
+  ExtraField('nett', 'Nett per pkg', ExtraKind.number, suffix: 'kg'),
+  ExtraField('total_lot_pkgs', 'Total lot pkgs', ExtraKind.integer),
+  ExtraField('pencil_rate', 'Pencil rate', ExtraKind.money),
+  ExtraField('net_price', 'Net price', ExtraKind.money),
+  ExtraField('sub_party', 'Sub party', ExtraKind.text),
+  ExtraField('location', 'Location', ExtraKind.text),
+  ExtraField('pkg_date', 'Packing date', ExtraKind.date),
+  ExtraField('lab_date', 'Lab date', ExtraKind.date),
+  ExtraField('sample_date', 'Sample date', ExtraKind.date),
+  ExtraField('samples_recd', 'Samples received', ExtraKind.date),
+  ExtraField('dispatch_date', 'Dispatch date', ExtraKind.date),
+];
+
 class SalesFormScreen extends ConsumerStatefulWidget {
   const SalesFormScreen({super.key, this.editing});
 
@@ -80,6 +97,7 @@ class SalesFormScreen extends ConsumerStatefulWidget {
 }
 
 class _SalesFormScreenState extends ConsumerState<SalesFormScreen> with FormSubmit {
+  late final _x = ExtraFieldsController(kSaleExtraFields, widget.editing?.raw ?? const {});
   late final SaleEntry? _e = widget.editing;
   late MasterItem? _buyer = _e?.buyerId == null ? null : MasterItem(_e!.buyerId!, _e.buyerName ?? '#${_e.buyerId}');
   late String? _grade = _e?.grade;
@@ -98,6 +116,7 @@ class _SalesFormScreenState extends ConsumerState<SalesFormScreen> with FormSubm
 
   @override
   void dispose() {
+    _x.dispose();
     for (final c in [_rate, _mark, _prefix, _inv, _pkgs, _qty, _cn, _transport, _discount, _remarks]) {
       c.dispose();
     }
@@ -108,6 +127,7 @@ class _SalesFormScreenState extends ConsumerState<SalesFormScreen> with FormSubm
     final ok = await submit<bool>(
       () async {
         final body = {
+          ..._x.body(),
           'buyer_id': _buyer?.id,
           'tea_grade': _grade,
           'rate_per_kg': Fmt.parse(_rate.text),
@@ -194,6 +214,7 @@ class _SalesFormScreenState extends ConsumerState<SalesFormScreen> with FormSubm
             FieldInput(label: 'Transport', hint: 'V-Trans Logistics', controller: _transport),
           ],
         ),
+        ExtraFieldsSection(label: 'Lot and dates', controller: _x, errors: errors, onChanged: () => setState(() {})),
         GroupedSection(
           label: 'Other',
           footer: Text('Amount ${Fmt.money(amount)}'),
@@ -248,6 +269,7 @@ class SalesDetailScreen extends StatelessWidget {
             if (s.remarks != null) InfoBlock('Remarks', s.remarks!),
           ],
         ),
+        if (extraInfoRows(kSaleExtraFields, s.raw).isNotEmpty) GroupedSection(label: 'More details', children: extraInfoRows(kSaleExtraFields, s.raw)),
         DeleteRecordButton(
           what: 'sale',
           name: [s.mark, Fmt.invoice(s.invoicePrefix, s.invoiceNo)].whereType<String>().where((e) => e.isNotEmpty).join(' · '),

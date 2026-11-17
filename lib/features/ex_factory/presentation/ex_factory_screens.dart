@@ -27,6 +27,7 @@ import '../../masters/presentation/master_picker.dart';
 import '../data/ex_factory_repository.dart';
 import '../../../core/design/app_icons.dart';
 import '../../../core/widgets/controls.dart';
+import '../../../core/widgets/extra_fields.dart';
 
 class ExFactoryListScreen extends ConsumerStatefulWidget {
   const ExFactoryListScreen({super.key});
@@ -126,6 +127,27 @@ class _ExFactoryListScreenState extends ConsumerState<ExFactoryListScreen> {
   }
 }
 
+
+/// Website form fields the API saves (dropdowns load from their own APIs).
+const kBillExtraFields = <ExtraField>[
+  ExtraField('tcs_194q', 'TCS 194Q', ExtraKind.money),
+  ExtraField('tcs_206c', 'TCS 206C', ExtraKind.money),
+  ExtraField('tds_194q', 'TDS 194Q', ExtraKind.money),
+  ExtraField('tds_206c', 'TDS 206C', ExtraKind.money),
+  ExtraField('rounding', 'Rounding', ExtraKind.money),
+  ExtraField('discount_percent', 'Discount', ExtraKind.number, suffix: '%'),
+  ExtraField('bill_recd_date', 'Bill received', ExtraKind.date),
+  ExtraField('payment_date', 'Payment date', ExtraKind.date),
+  ExtraField('payment_amount', 'Payment amount', ExtraKind.money),
+  ExtraField('dn_cn_value', 'DN/CN value', ExtraKind.money),
+  ExtraField('dn_cn_bill', 'DN/CN bill no', ExtraKind.text),
+  ExtraField('dn_cn_reason', 'DN/CN reason', ExtraKind.text),
+  ExtraField('broker_name', 'Broker', ExtraKind.text),
+  ExtraField('buyer_commission', 'Buyer commission', ExtraKind.money),
+  ExtraField('seller_commission', 'Seller commission', ExtraKind.money),
+  ExtraField('remarks', 'Remarks', ExtraKind.text),
+];
+
 class ExFactoryFormScreen extends ConsumerStatefulWidget {
   const ExFactoryFormScreen({super.key, this.editing});
 
@@ -137,6 +159,7 @@ class ExFactoryFormScreen extends ConsumerStatefulWidget {
 }
 
 class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with FormSubmit {
+  late final _x = ExtraFieldsController(kBillExtraFields, widget.editing?.raw ?? const {});
   static const _gstRate = 0.05;
   late final ExFactoryBill? _e = widget.editing;
   late DateTime _date = _e?.billDate ?? DateTime.now();
@@ -160,6 +183,7 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
 
   @override
   void dispose() {
+    _x.dispose();
     for (final c in [_mark, _prefix, _inv, _pkgs, _nett, _taxable, _igstAmt, _cgstAmt, _sgstAmt, _total, _cn, _transport, _credit]) {
       c.dispose();
     }
@@ -194,6 +218,7 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
     final res = await submit<({ExFactoryBill? bill})>(
       () async {
         final body = {
+          ..._x.body(),
         'bill_date': Fmt.api(_date),
         'mark': _mark.text.trim(),
         'invoice_no': _inv.text.trim(),
@@ -319,6 +344,7 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
             FieldInput(label: 'Credit days', hint: '15', controller: _credit, keyboardType: TextInputType.number, inputFormatters: digitsOnly, textInputAction: TextInputAction.done),
           ],
         ),
+        ExtraFieldsSection(label: 'Taxes, payment and notes', controller: _x, errors: errors, onChanged: () => setState(() {})),
       ],
     );
   }
@@ -375,6 +401,7 @@ class ExFactoryDetailScreen extends StatelessWidget {
             InfoRow('Credit days', b.creditDays?.toString()),
           ],
         ),
+        if (extraInfoRows(kBillExtraFields, b.raw).isNotEmpty) GroupedSection(label: 'More details', children: extraInfoRows(kBillExtraFields, b.raw)),
         DeleteRecordButton(
           what: 'bill',
           name: [b.billNo, b.mark, Fmt.invoice(b.invoicePrefix, b.invoiceNo)].whereType<String>().where((e) => e.isNotEmpty).join(' · '),

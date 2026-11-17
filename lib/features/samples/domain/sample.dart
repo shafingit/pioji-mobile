@@ -22,6 +22,7 @@ enum SampleStatus {
 
 class Sample {
   const Sample({
+    this.raw = const {},
     required this.id,
     this.arrivalDate,
     this.gardenId,
@@ -48,6 +49,9 @@ class Sample {
     this.overallScore,
     this.scores = const {},
   });
+
+  /// The record as the API sent it, for fields read through [ExtraField]s.
+  final Map<String, dynamic> raw;
 
   /// Tasting score fields, in the order they're shown (0–10 each).
   static const scoreFields = {
@@ -101,6 +105,7 @@ class Sample {
   String get statusLabel => status == SampleStatus.unknown ? (statusRaw ?? 'Unknown') : status.label;
 
   factory Sample.fromJson(Map<String, dynamic> j) => Sample(
+        raw: j,
         id: J.intOr(j['id'], 0),
         arrivalDate: J.date(j['arrival_date']),
         gardenId: J.integer(j['garden_id']),

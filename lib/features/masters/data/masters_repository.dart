@@ -108,6 +108,20 @@ class MastersRepository {
     }
   }
 
+  /// Invoice types from `GET /invoice-types`: the stored value and its label.
+  Future<List<({String value, String label})>> invoiceTypes() async {
+    try {
+      final data = await _api.getData('/invoice-types');
+      final list = data is List ? data : (J.map(data)?['types'] as List? ?? const []);
+      return [
+        for (final t in list.whereType<Map<String, dynamic>>())
+          if (J.str(t['type']) != null) (value: J.str(t['type'])!, label: J.str(t['label']) ?? J.str(t['type'])!),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// Companies a sample can be for (`GET /billing-companies`): the code is
   /// what samples store in `for_company`.
   Future<List<({String code, String name})>> billingCompanies() async {
@@ -188,6 +202,7 @@ final buyerPostingListsProvider = FutureProvider.family<List<MasterItem>, int>(
   (ref, buyerId) => ref.read(mastersRepositoryProvider).list('/posting-lists', query: {'buyer_id': buyerId}),
 );
 
+final invoiceTypesProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).invoiceTypes());
 final billingCompaniesProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).billingCompanies());
 
 /// Grades set up for one garden.

@@ -31,6 +31,7 @@ enum RegisterStatus {
 
 class ExFactoryBill {
   const ExFactoryBill({
+    this.raw = const {},
     required this.id,
     this.billNo,
     this.billDate,
@@ -53,6 +54,9 @@ class ExFactoryBill {
     this.creditDays,
     this.status,
   });
+
+  /// The record as the API sent it, for fields read through [ExtraField]s.
+  final Map<String, dynamic> raw;
 
   final int id;
   final String? billNo;
@@ -77,6 +81,7 @@ class ExFactoryBill {
   final RegisterStatus? status;
 
   factory ExFactoryBill.fromJson(Map<String, dynamic> j) => ExFactoryBill(
+        raw: j,
         id: J.intOr(j['id'], 0),
         billNo: J.str(j['bill_no']) ?? J.str(j['bill_number']),
         billDate: J.date(j['bill_date']),

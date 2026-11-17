@@ -19,6 +19,15 @@ import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/samples_repository.dart';
 import '../domain/sample.dart';
+import '../../../core/widgets/extra_fields.dart';
+
+
+/// Website form fields the API saves (dropdowns load from their own APIs).
+const kSampleExtraFields = <ExtraField>[
+  ExtraField('gross_weight', 'Gross weight', ExtraKind.number, suffix: 'kg'),
+  ExtraField('d_o_packing', 'Date of packing', ExtraKind.date),
+  ExtraField('requests_purchased_sample', 'Requests purchased sample', ExtraKind.flag),
+];
 
 class SampleFormScreen extends ConsumerStatefulWidget {
   const SampleFormScreen({super.key, this.editing});
@@ -31,6 +40,7 @@ class SampleFormScreen extends ConsumerStatefulWidget {
 }
 
 class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSubmit {
+  late final _x = ExtraFieldsController(kSampleExtraFields, widget.editing?.raw ?? const {});
   late final Sample? _e = widget.editing;
   late DateTime _arrival = _e?.arrivalDate ?? DateTime.now();
 
@@ -51,6 +61,7 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
 
   @override
   void dispose() {
+    _x.dispose();
     for (final c in [_prefix, _inv, _pkgs, _nett, _total, _remarks]) {
       c.dispose();
     }
@@ -58,6 +69,7 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
   }
 
   Map<String, Object?> _body({bool duplicate = false}) => {
+        ..._x.body(),
         'arrival_date': Fmt.api(_arrival),
         'garden_id': _garden?.id,
         'grade': _grade,
@@ -154,6 +166,7 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
           errors: errors,
           keys: (pkgs: 'packages', nett: 'weight', total: 'total_kgs'),
         ),
+        ExtraFieldsSection(controller: _x, errors: errors, onChanged: () => setState(() {})),
         GroupedSection(
           label: 'Details',
           children: [
