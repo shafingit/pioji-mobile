@@ -37,7 +37,14 @@ class AuthController extends AsyncNotifier<AuthState> {
             deviceName: await _deviceName(),
           );
       await ref.read(secureStoreProvider).writeToken(result.token);
-      final user = result.user ?? User(name: 'Admin', email: email);
+      // The login response may not carry the role and permissions; /auth/me does.
+      User? me;
+      try {
+        me = await ref.read(authRepositoryProvider).me();
+      } on AppFailure {
+        me = null;
+      }
+      final user = me ?? result.user ?? User(name: 'Admin', email: email);
       _remember(user);
       state = AsyncData(Authenticated(user));
       return null;
@@ -89,3 +96,9 @@ class AuthController extends AsyncNotifier<AuthState> {
 }
 
 final authControllerProvider = AsyncNotifierProvider<AuthController, AuthState>(AuthController.new);
+
+/// The signed-in user, or null.
+final currentUserProvider = Provider<User?>((ref) {
+  final auth = ref.watch(authControllerProvider).value;
+  return auth is Authenticated ? auth.user : null;
+});

@@ -33,6 +33,10 @@ import '../storage/prefs.dart';
 import '../widgets/detail_loader.dart';
 import 'routes.dart';
 import 'shell_scaffold.dart';
+import '../../features/samples/presentation/tasting_screens.dart';
+import '../../features/bid_book/presentation/bid_bulk_screen.dart';
+import '../../features/users/data/users_repository.dart';
+import '../../features/users/presentation/users_screens.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -123,6 +127,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ]),
                 GoRoute(path: ':id', name: Routes.sampleDetail, routes: [
                   _top('edit', Routes.sampleEdit, (s) => SampleFormScreen(editing: _extra<Sample>(s))),
+                  _top('tasting', Routes.sampleTasting, (s) => TastingFormScreen(sample: _extra<Sample>(s))),
                 ], builder: (_, s) => _detail<Sample>(s, 'sample', (r, id) => r.read(samplesRepositoryProvider).get(id), (x) => SampleDetailScreen(sample: x))),
               ],
             ),
@@ -151,6 +156,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               builder: (_, _) => const BidBookScreen(),
               routes: [
                 _top('new', Routes.bidNew, (_) => const BidFormScreen()),
+                _top('bulk', Routes.bidBulk, (_) => const BidBulkScreen()),
                 GoRoute(path: ':id', name: Routes.bidDetail, builder: (_, s) => _detail<Bid>(s, 'lot', (r, id) => r.read(bidBookRepositoryProvider).get(id), (x) => BidDetailScreen(bid: x)), routes: [
                   _top('edit', Routes.bidEdit, (s) => BidFormScreen(editing: _extra<Bid>(s))),
                 ]),
@@ -187,6 +193,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     _top('edit', Routes.exFactoryEdit, (s) => ExFactoryFormScreen(editing: _extra<ExFactoryBill>(s))),
                   ]),
                 ]),
+                GoRoute(path: 'users', name: Routes.users, builder: (_, _) => const UsersListScreen(), routes: [
+                  _top('new', Routes.userNew, (_) => const UserFormScreen()),
+                  GoRoute(path: ':id', name: Routes.userDetail, builder: (_, s) => _detail<User>(s, 'user', (r, id) => r.read(usersRepositoryProvider).get(id), (x) => UserDetailScreen(user: x)), routes: [
+                    _top('edit', Routes.userEdit, (s) => UserFormScreen(editing: _extra<User>(s))),
+                  ]),
+                ]),
+                GoRoute(path: 'tasting-report', name: Routes.tastingReport, builder: (_, _) => const TastingReportScreen()),
                 GoRoute(path: 'settings', name: Routes.settings, builder: (_, _) => const SettingsScreen()),
               ],
             ),

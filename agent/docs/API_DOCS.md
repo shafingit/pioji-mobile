@@ -7,7 +7,7 @@
 | **Format** | JSON (`multipart/form-data` only for photo uploads) |
 | **Last verified** | 2026-10-31 (signed in as admin; GETs and validation only) |
 
-> ✅ **Server bugs (updated 2026-11-09).** All 22 issues from 5 Nov are fixed. See the re-tests below and `agent/STATUS.md` → API status.
+> ✅ **Server status (updated 2026-11-17).** The 5 Nov issues and the 12 Nov client-feedback requests are done; a few small issues remain. See the re-tests below and `agent/STATUS.md` → API status.
 
 ---
 
@@ -796,6 +796,21 @@ Same method: TEST records dated 31 Dec 2026, all deleted afterwards (sample coun
 | Dashboard numbers | Checked against the lists: samples, open bids, offers, batches match; ex-factory `mismatched` and `unregistered` match the list's `register_status` counts (TEST bills). `sales_register.total` counts **records**, so a sale split between two buyers counts twice (8 vs 7 in the list). `total_amount`, `total_kg` and `pending` match the list and cover all time |
 | Split sales | The list returns one row per sale with `split_count`, `all_split_ids`, `aggregated_pkgs`, `aggregated_quantity_kg`, `aggregated_total_amount`. `GET /sales-register/{id}` has none of these (`is_split` false, `split_count` null) and returns only that split's own figures |
 | Sellers | `POST /sellers {seller_name}` → 201, `data` is the seller with an `id` ✅. `DELETE /sellers/{id}` → 200, and 404 "Seller not found." for a missing id ✅ |
+
+### Re-test (2026-11-17): client-feedback endpoints
+
+| Area | Result |
+|---|---|
+| Sorting | `sort_by` + `sort_dir` (`asc`/`desc`) on samples, offers, bids, sales, contracts, courier, ex-factory ✅. Unknown field → 422 listing the allowed ones (samples: `arrival_date, garden_name, inv_no, id, created_at, status, grade, price_per_kg, overall_score, sample_id, sample_name`) |
+| Mark filter | `garden_id` on samples, offers, bids ✅ |
+| Posting lists | `GET /posting-lists?buyer_id=` → only that buyer's lists ✅ |
+| Grades | `GET /gardens/{id}/grades` → `[{code, tea_type}]` ✅ |
+| Permissions | `/auth/me` user has `role` (`super_admin`), `role_text`, `phone`, `department`, `status`, `buyer_ids`, `permissions` incl. `samples.edit_arrival_date`, `samples.allocate_buyers`, `offer_lists.*`, `users.*`, `roles.manage` ✅ |
+| Users | `GET /users` (`search`, `role`, `status`), `GET /users/{id}`, `POST /users` (`name`, `email`, `password`, `role` required), `PUT /users/{id}`, `PATCH /users/{id}/status`, `PUT /users/{id}/role`; no delete. `GET /roles` → 5 roles with permissions ✅ (writes not tried: they create real logins) |
+| Sample fields | `for_company` (billing company **code** string or `all`), `sample_type` (`original`/`standard`), `party_id`; all three filter `/samples` ✅. `GET /billing-companies` ✅. `party` comes back null |
+| Tasting | `POST /samples/{id}/tasting` (score fields 0–10, `evaluation_comments`) → status `evaluated`, `evaluation_status` `completed`, server `overall_score` ✅. `POST /samples/{id}/park` / `unpark` ✅, `?parked=1`, `?evaluation_status=completed` ✅. `GET /reports/tasting` (`from`, `to`, `garden_id`) ✅. Old website scores are 0–100 ❌ |
+| Bulk bids | `POST /bid-book/bulk {items: [...]}` → `created_ids` + per-row `errors` ✅, but a row without `max_bid` fails with a raw SQL error ❌. `PATCH /bid-book/bulk {ids, seller_incoming_price?, max_bid?}` ✅ |
+| Small fixes | `GET /sales-register/{id}` now has the split fields ✅; dashboard has `sales_count` / `records_count` ✅; `GET /bid-book/bulk` → 404 ✅ |
 
 ### Still missing
 

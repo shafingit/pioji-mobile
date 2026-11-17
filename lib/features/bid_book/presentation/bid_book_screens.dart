@@ -34,6 +34,7 @@ class BidBookScreen extends StatelessWidget {
     return ModuleListScreen<Bid>(
       title: 'Bid book',
       listProvider: bidBookListProvider,
+      sortField: 'created_at',
       queryProvider: bidBookQueryProvider,
       searchHint: 'Search invoice, garden or buyer',
       emptyIcon: AppIcons.bids,
@@ -41,7 +42,10 @@ class BidBookScreen extends StatelessWidget {
       emptyBody: 'Lots under negotiation show up here with their prices.',
       newLabel: 'New lot',
       onNew: () => context.pushNamed(Routes.bidNew),
-      actions: [AddButton(semanticLabel: 'New lot', onPressed: () => context.pushNamed(Routes.bidNew))],
+      actions: [
+        LinkButton(label: 'Bulk', onPressed: () => context.pushNamed(Routes.bidBulk)),
+        AddButton(semanticLabel: 'New lot', onPressed: () => context.pushNamed(Routes.bidNew)),
+      ],
       segments: const SegmentConfig(param: 'tab', options: {
         'all': 'All',
         'open': 'Open',
@@ -51,7 +55,7 @@ class BidBookScreen extends StatelessWidget {
       }),
       filters: [
         ChoiceFilter('grade', 'Grade', {for (final g in kTeaGrades) g: g}),
-        const PickerFilter('mark', 'Mark', pickMark),
+        const PickerFilter('garden_id', 'Mark', pickMark),
       ],
       // All lots of one mark together, in invoice order.
       grouping: ListGrouping(section: (b) => b.gardenName, order: (b) => b.invoiceNumber),

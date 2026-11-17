@@ -23,12 +23,14 @@ import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/offer_lists_repository.dart';
 import '../../../core/design/app_icons.dart';
+import '../../auth/application/auth_controller.dart';
 
-class OfferListsScreen extends StatelessWidget {
+class OfferListsScreen extends ConsumerWidget {
   const OfferListsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canCreate = ref.watch(currentUserProvider)?.can('offer_lists.create') ?? true;
     return ModuleListScreen<OfferList>(
       title: 'Offer lists',
       listProvider: offerListsListProvider,
@@ -37,20 +39,20 @@ class OfferListsScreen extends StatelessWidget {
       emptyIcon: AppIcons.offers,
       emptyTitle: 'Add your first offer',
       emptyBody: 'Lots offered to buyers show up here with their price.',
-      newLabel: 'New offer',
-      onNew: () => context.pushNamed(Routes.offerNew),
+      newLabel: canCreate ? 'New offer' : null,
+      onNew: canCreate ? () => context.pushNamed(Routes.offerNew) : null,
       actions: [
         LinkButton(label: 'Offered today', onPressed: () => context.pushNamed(Routes.offeredToday)),
-        AddButton(semanticLabel: 'New offer', onPressed: () => context.pushNamed(Routes.offerNew)),
+        if (canCreate) AddButton(semanticLabel: 'New offer', onPressed: () => context.pushNamed(Routes.offerNew)),
       ],
       filters: [
         const DateFilter('date_from', 'From'),
         const DateFilter('date_to', 'To'),
         ChoiceFilter('grade', 'Grade', {for (final g in kTeaGrades) g: g}),
         const ChoiceFilter('type', 'Type', {'Tea': 'Tea'}),
-        const PickerFilter('mark', 'Mark', pickMark),
+        const PickerFilter('garden_id', 'Mark', pickMark),
       ],
-      sortable: true,
+      sortField: 'date',
       grouping: ListGrouping(
         section: (o) => o.date == null ? 'No date' : Fmt.day(o.date),
         subgroup: (o) => o.gardenName,
@@ -191,7 +193,7 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
           children: [
             DateRow(label: 'Date', value: _date, onChanged: (d) => setState(() => _date = d), error: err('date')),
             MasterPickerRow(label: 'Garden', provider: gardensProvider, searchPath: '/gardens', value: _garden, onChanged: (g) => setState(() => _garden = g), error: err('garden_id')),
-            GradePickerRow(value: _grade, onChanged: (g) => setState(() => _grade = g), error: err('grade')),
+            GradePickerRow(gardenId: _garden?.id, value: _grade, onChanged: (g) => setState(() => _grade = g), error: err('grade')),
             Row(children: [
               SizedBox(width: 120, child: FieldInput(label: 'Prefix', hint: 'IVP', controller: _prefix, textCapitalization: TextCapitalization.characters, error: err('inv_prefix'))),
               Expanded(child: FieldInput(label: 'Invoice no', hint: '1045', controller: _inv, error: err('inv_no'))),

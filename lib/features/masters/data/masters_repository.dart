@@ -47,12 +47,12 @@ class MastersRepository {
   final Api _api;
 
   /// Every page of a small list (buyers, sellers, negotiators, posting lists).
-  Future<List<MasterItem>> list(String path) async {
+  Future<List<MasterItem>> list(String path, {Map<String, Object?> query = const {}}) async {
     try {
       final out = <MasterItem>[];
       var page = 1;
       while (page <= 10) {
-        final p = await _api.page<MasterItem?>(path, MasterItem.fromJson, page: page, perPage: 100);
+        final p = await _api.page<MasterItem?>(path, MasterItem.fromJson, query: query, page: page, perPage: 100);
         out.addAll(p.items.whereType<MasterItem>());
         if (!p.hasMore) break;
         page++;
@@ -108,6 +108,39 @@ class MastersRepository {
     }
   }
 
+  /// Companies a sample can be for (`GET /billing-companies`): the code is
+  /// what samples store in `for_company`.
+  Future<List<({String code, String name})>> billingCompanies() async {
+    try {
+      final p = await _api.page<({String code, String name})?>(
+        '/billing-companies',
+        (j) {
+          final code = J.str(j['code']);
+          return code == null ? null : (code: code, name: J.str(j['company_name']) ?? code);
+        },
+        perPage: 200,
+      );
+      return p.items.whereType<({String code, String name})>().toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Grades set up for one garden (`GET /gardens/{id}/grades`): code plus tea
+  /// type. Empty when the garden has none set up.
+  Future<List<({String code, String? type})>> gardenGrades(int gardenId) async {
+    try {
+      final data = await _api.getData('/gardens/$gardenId/grades');
+      final list = data is List ? data : (J.map(data)?['grades'] as List? ?? const []);
+      return [
+        for (final g in list.whereType<Map<String, dynamic>>())
+          if (J.str(g['code']) != null) (code: J.str(g['code'])!, type: J.str(g['tea_type'])),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// Quick-register a buyer or seller by name (`POST /buyers`, `POST /sellers`).
   /// The server fills the rest (code, type, placeholder email).
   Future<MasterItem> create(String path, String nameKey, String name) async {
@@ -149,6 +182,18 @@ final buyersProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvide
 final sellersProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).list('/sellers'));
 final negotiatorsProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).list('/negotiators'));
 final postingListsProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).list('/posting-lists'));
+
+/// Posting lists holding samples for one buyer (`?buyer_id=`).
+final buyerPostingListsProvider = FutureProvider.family<List<MasterItem>, int>(
+  (ref, buyerId) => ref.read(mastersRepositoryProvider).list('/posting-lists', query: {'buyer_id': buyerId}),
+);
+
+final billingCompaniesProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).billingCompanies());
+
+/// Grades set up for one garden.
+final gardenGradesProvider = FutureProvider.family<List<({String code, String? type})>, int>(
+  (ref, gardenId) => ref.read(mastersRepositoryProvider).gardenGrades(gardenId),
+);
 final courierOptionsProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).courierOptions());
 final gradesProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).grades());
 

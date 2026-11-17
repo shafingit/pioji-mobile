@@ -60,6 +60,7 @@ class _ExFactoryListScreenState extends ConsumerState<ExFactoryListScreen> {
       title: 'Ex-factory',
       inTabs: false,
       listProvider: exFactoryListProvider,
+      sortField: 'bill_date',
       queryProvider: exFactoryQueryProvider,
       searchHint: 'Search bill, supplier, mark or transporter',
       emptyIcon: AppIcons.exFactory,

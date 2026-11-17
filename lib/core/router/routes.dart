@@ -11,6 +11,8 @@ abstract final class Routes {
   static const sampleNew = 'sampleNew';
   static const sampleDetail = 'sampleDetail';
   static const sampleEdit = 'sampleEdit';
+  static const sampleTasting = 'sampleTasting';
+  static const tastingReport = 'tastingReport';
   static const batches = 'batches';
   static const batchNew = 'batchNew';
   static const batchAuto = 'batchAuto';
@@ -27,6 +29,7 @@ abstract final class Routes {
   static const bidNew = 'bidNew';
   static const bidDetail = 'bidDetail';
   static const bidEdit = 'bidEdit';
+  static const bidBulk = 'bidBulk';
 
   static const more = 'more';
   static const courier = 'courier';
@@ -46,4 +49,8 @@ abstract final class Routes {
   static const exFactoryDetail = 'exFactoryDetail';
   static const exFactoryEdit = 'exFactoryEdit';
   static const settings = 'settings';
+  static const users = 'users';
+  static const userNew = 'userNew';
+  static const userDetail = 'userDetail';
+  static const userEdit = 'userEdit';
 }

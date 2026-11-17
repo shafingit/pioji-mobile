@@ -61,6 +61,10 @@ class MoreScreen extends ConsumerWidget {
                         children: [
                           OneLineText(user.name, style: AppText.body.copyWith(fontWeight: FontWeight.w500)),
                           if (user.email.isNotEmpty) OneLineText(user.email, style: AppText.footnote.copyWith(color: c.textTertiary)),
+                          if ([?user.roleText, ?user.phone, ?user.department].isNotEmpty)
+                            OneLineText([?user.roleText, ?user.phone, ?user.department].join(' · '), style: AppText.footnote.copyWith(color: c.accent)),
+                          if (user.buyerIds.isNotEmpty)
+                            OneLineText('${user.buyerIds.length} linked ${user.buyerIds.length == 1 ? 'buyer' : 'buyers'}', style: AppText.footnote.copyWith(color: c.textTertiary)),
                         ],
                       ),
                     ),
@@ -76,6 +80,7 @@ class MoreScreen extends ConsumerWidget {
                 reg(AppIcons.courier, 'Courier register', Routes.courier),
                 reg(AppIcons.contracts, 'Contracts', Routes.contracts),
                 reg(AppIcons.sales, 'Sales register', Routes.sales),
+                reg(AppIcons.allDone, 'Tasting report', Routes.tastingReport),
                 reg(AppIcons.exFactory, 'Ex-factory register', Routes.exFactory, meta: mismatches > 0 ? '$mismatches mismatches' : null),
               ],
             ),
@@ -83,6 +88,8 @@ class MoreScreen extends ConsumerWidget {
             GroupedSection(
               label: 'Account',
               children: [
+                if (user?.can('users.view') ?? false)
+                  AppListRow(title: 'Users', titleStyle: AppText.body, minHeight: 50, showChevron: true, onTap: () => context.pushNamed(Routes.users)),
                 AppListRow(title: 'Settings', titleStyle: AppText.body, minHeight: 50, showChevron: true, onTap: () => context.pushNamed(Routes.settings)),
                 AppListRow(
                   title: 'Sign out',

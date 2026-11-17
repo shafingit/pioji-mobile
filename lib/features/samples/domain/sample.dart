@@ -37,7 +37,28 @@ class Sample {
     this.statusRaw,
     this.remarks,
     this.batchRef,
+    this.forCompany,
+    this.partyId,
+    this.partyName,
+    this.isParked = false,
+    this.evaluationStatus,
+    this.evaluatedAt,
+    this.evaluatedBy,
+    this.comments,
+    this.overallScore,
+    this.scores = const {},
   });
+
+  /// Tasting score fields, in the order they're shown (0–10 each).
+  static const scoreFields = {
+    'appearance_score': 'Appearance',
+    'aroma_score': 'Aroma',
+    'liquor_score': 'Liquor',
+    'color_score': 'Colour',
+    'taste_score': 'Taste',
+    'strength_score': 'Strength',
+    'briskness_score': 'Briskness',
+  };
 
   final int id;
   final DateTime? arrivalDate;
@@ -55,6 +76,26 @@ class Sample {
   final String? remarks;
   /// Batch reference, e.g. `BATCH20260904001-01` (the API sends text, not an id).
   final String? batchRef;
+
+  /// Billing company code the sample is for (e.g. `GOLAGHAT JALLAN`), or `all`.
+  final String? forCompany;
+
+  /// Buyer an outgoing sample goes to.
+  final int? partyId;
+  final String? partyName;
+  final bool isParked;
+
+  /// `completed` once tasted.
+  final String? evaluationStatus;
+  final DateTime? evaluatedAt;
+  final String? evaluatedBy;
+  final String? comments;
+  final double? overallScore;
+
+  /// Tasting scores by API field (see [scoreFields]); only those set.
+  final Map<String, double> scores;
+
+  bool get isTasted => evaluationStatus == 'completed' || overallScore != null;
 
   String get title => [gardenName ?? 'Garden #${gardenId ?? '–'}', ?grade].join(' · ');
   String get statusLabel => status == SampleStatus.unknown ? (statusRaw ?? 'Unknown') : status.label;
@@ -75,5 +116,18 @@ class Sample {
         statusRaw: J.str(j['status']),
         remarks: J.str(j['remarks']),
         batchRef: J.str(j['batch_id']),
+        forCompany: J.str(j['for_company']),
+        partyId: J.integer(j['party_id']) ?? J.integer(J.map(j['party'])?['id']),
+        partyName: J.str(J.map(j['party'])?['buyer_name']) ?? J.str(J.map(j['party'])?['name']),
+        isParked: J.boolOr(j['is_parked'], false),
+        evaluationStatus: J.str(j['evaluation_status']),
+        evaluatedAt: J.date(j['evaluated_at']),
+        evaluatedBy: J.str(J.map(j['evaluated_by'])?['name']) ?? (j['evaluated_by'] is String ? J.str(j['evaluated_by']) : null),
+        comments: J.str(j['evaluation_comments']),
+        overallScore: J.dbl(j['overall_score']),
+        scores: {
+          for (final k in scoreFields.keys)
+            if (J.dbl(j[k]) != null) k: J.dbl(j[k])!,
+        },
       );
 }

@@ -13,12 +13,15 @@ import '../../masters/presentation/master_picker.dart';
 import '../data/samples_repository.dart';
 import '../domain/sample.dart';
 import '../../../core/design/app_icons.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../masters/data/masters_repository.dart';
 
-class SamplesListScreen extends StatelessWidget {
+class SamplesListScreen extends ConsumerWidget {
   const SamplesListScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final companies = ref.watch(billingCompaniesProvider).value ?? const [];
     return ModuleListScreen<Sample>(
       title: 'Samples',
       listProvider: samplesListProvider,
@@ -37,8 +40,15 @@ class SamplesListScreen extends StatelessWidget {
         '': 'All',
         for (final s in SampleStatus.pickable) s.api: s.label,
       }),
-      filters: const [DateFilter('arrival_date', 'Arrival'), PickerFilter('mark', 'Mark', pickMark)],
-      sortable: true,
+      filters: [
+        const DateFilter('arrival_date', 'Arrival'),
+        const PickerFilter('garden_id', 'Mark', pickMark),
+        ChoiceFilter('for_company', 'For', {'all': 'All companies', for (final c in companies) c.code: c.name}),
+        const ChoiceFilter('sample_type', 'Type', {'original': 'Original', 'standard': 'Standard'}),
+        const ChoiceFilter('evaluation_status', 'Tasting', {'completed': 'Tasted'}),
+        const ChoiceFilter('parked', 'Parked', {'1': 'Parked only'}),
+      ],
+      sortField: 'arrival_date',
       grouping: ListGrouping(
         section: (s) => s.arrivalDate == null ? 'No arrival date' : Fmt.day(s.arrivalDate),
         subgroup: (s) => s.gardenName,
@@ -59,6 +69,8 @@ class SampleRow extends StatelessWidget {
     final sub = [
       Fmt.invoice(s.invoicePrefix, s.invoiceNo),
       if (s.packages != null && s.weight != null) '${s.packages} × ${Fmt.editable(s.weight)} kg',
+      if (s.overallScore != null) 'Score ${Fmt.editable(s.overallScore)}',
+      if (s.isParked) 'Parked',
     ].where((e) => e.isNotEmpty).join(' · ');
     return AppListRow(
       title: s.title,

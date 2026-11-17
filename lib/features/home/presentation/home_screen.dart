@@ -18,6 +18,7 @@ import '../../samples/presentation/samples_list_screen.dart';
 import '../application/home_providers.dart';
 import '../../../core/design/app_icons.dart';
 import '../../../core/widgets/controls.dart';
+import '../../auth/application/auth_controller.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -26,6 +27,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
     String count(AsyncValue<int> v) => v.when(data: Fmt.number, loading: () => '–', error: (_, _) => '–');
+    final me = ref.watch(currentUserProvider);
     final dash = ref.watch(dashboardProvider);
     final d = dash.value;
     String dashCount(int? Function(DashboardSummary d) pick) => dash.hasValue ? Fmt.number(pick(dash.value!)) : '–';
@@ -125,8 +127,10 @@ class HomeScreen extends ConsumerWidget {
             Row(
               children: [
                 _Quick(icon: AppIcons.samples, label: 'New sample', onTap: () => context.pushNamed(Routes.sampleNew)),
-                _Quick(icon: AppIcons.offers, label: 'New offer', onTap: () => context.pushNamed(Routes.offerNew)),
-                _Quick(icon: AppIcons.personAdd, label: 'Allocate', onTap: () => context.pushNamed(Routes.offeredToday)),
+                if (me?.can('offer_lists.create') ?? true)
+                  _Quick(icon: AppIcons.offers, label: 'New offer', onTap: () => context.pushNamed(Routes.offerNew)),
+                if (me?.can('samples.allocate_buyers') ?? true)
+                  _Quick(icon: AppIcons.personAdd, label: 'Allocate', onTap: () => context.pushNamed(Routes.offeredToday)),
                 _Quick(icon: AppIcons.courier, label: 'Courier', onTap: () => context.pushNamed(Routes.courierNew)),
               ],
             ),

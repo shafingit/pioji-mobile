@@ -19,6 +19,8 @@ import '../../../core/widgets/one_line_text.dart';
 import '../../../core/widgets/scaffolds.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../domain/sample.dart';
+import '../../masters/data/masters_repository.dart';
+import 'tasting_screens.dart';
 
 class SampleDetailScreen extends ConsumerStatefulWidget {
   const SampleDetailScreen({super.key, required this.sample});
@@ -101,12 +103,29 @@ class _SampleDetailScreenState extends ConsumerState<SampleDetailScreen> {
         GroupedSection(
           label: 'Details',
           children: [
-            InfoRow('Sample type', s.sampleType),
+            InfoRow('Sample type', s.sampleType == null ? null : '${s.sampleType![0].toUpperCase()}${s.sampleType!.substring(1)}'),
+            Consumer(builder: (context, ref, _) {
+              final companies = ref.watch(billingCompaniesProvider).value ?? const [];
+              var forText = s.forCompany == 'all' ? 'All companies' : s.forCompany;
+              for (final c in companies) {
+                if (c.code == s.forCompany) forText = c.name;
+              }
+              return InfoRow('For', forText ?? 'Not set');
+            }),
+            if (s.partyId != null)
+              Consumer(builder: (context, ref, _) {
+                var name = s.partyName;
+                for (final b in ref.watch(buyersProvider).value ?? const <MasterItem>[]) {
+                  if (b.id == s.partyId) name = b.name;
+                }
+                return InfoRow('Party (outgoing)', name ?? 'Buyer #${s.partyId}');
+              }),
             InfoRow('Grade', s.grade),
             InfoRow('Batch', s.batchRef ?? 'Not batched'),
             if (s.remarks != null) InfoBlock('Remarks', s.remarks!),
           ],
         ),
+        SampleTastingSection(sample: s),
         PrimaryButton(label: 'Delete sample', destructive: true, loading: _deleting, onPressed: () => _delete(s)),
       ],
     );

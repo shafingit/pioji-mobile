@@ -13,6 +13,8 @@ import '../../../core/widgets/scaffolds.dart';
 import '../../../core/widgets/sheets.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/widgets/weight_fields.dart';
+import '../../../core/widgets/detail.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/samples_repository.dart';
@@ -31,10 +33,13 @@ class SampleFormScreen extends ConsumerStatefulWidget {
 class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSubmit {
   late final Sample? _e = widget.editing;
   late DateTime _arrival = _e?.arrivalDate ?? DateTime.now();
+
   late MasterItem? _garden =
       _e?.gardenId == null ? null : MasterItem(_e!.gardenId!, _e.gardenName ?? '#${_e.gardenId}');
   late String? _grade = _e?.grade;
-  late String _type = _e?.sampleType ?? 'Original';
+  late String _type = (_e?.sampleType ?? 'original').toLowerCase();
+  late String? _forCompany = _e?.forCompany;
+  late MasterItem? _party = _e?.partyId == null ? null : MasterItem(_e!.partyId!, _e.partyName ?? '#${_e.partyId}');
   late SampleStatus _status =
       _e == null || _e.status == SampleStatus.unknown ? SampleStatus.received : _e.status;
   late final _prefix = TextEditingController(text: _e?.invoicePrefix);
@@ -62,6 +67,8 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
         'weight': Fmt.parse(_nett.text),
         'total_kgs': Fmt.parse(_total.text),
         'sample_type': _type,
+        'for_company': _forCompany,
+        'party_id': _party?.id,
         'status': _status.api,
         'remarks': _remarks.text.trim(),
         if (duplicate) 'is_duplicate': true,
@@ -121,9 +128,14 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
         GroupedSection(
           label: 'Lot',
           children: [
-            DateRow(label: 'Arrival date', value: _arrival, onChanged: (d) => setState(() => _arrival = d), error: err('arrival_date')),
+            // Without `samples.edit_arrival_date` the arrival date is today and
+            // can't be changed (the server enforces it too).
+            if (ref.watch(currentUserProvider)?.can('samples.edit_arrival_date') ?? true)
+              DateRow(label: 'Arrival date', value: _arrival, onChanged: (d) => setState(() => _arrival = d), error: err('arrival_date'))
+            else
+              InfoRow('Arrival date', '${Fmt.day(_arrival)} · locked'),
             MasterPickerRow(label: 'Garden', provider: gardensProvider, searchPath: '/gardens', value: _garden, onChanged: (g) => setState(() => _garden = g), error: err('garden_id')),
-            GradePickerRow(value: _grade, onChanged: (g) => setState(() => _grade = g), error: err('grade')),
+            GradePickerRow(gardenId: _garden?.id, value: _grade, onChanged: (g) => setState(() => _grade = g), error: err('grade')),
             Row(
               children: [
                 SizedBox(
@@ -152,12 +164,21 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
                   const Expanded(child: Text('Sample type')),
                   Segmented<String>(
                     compact: true,
-                    options: const {'Original': 'Original', 'Standard': 'Standard'},
+                    options: const {'original': 'Original', 'standard': 'Standard'},
                     selected: _type,
                     onChanged: (v) => setState(() => _type = v),
                   ),
                 ],
               ),
+            ),
+            _ForCompanyRow(value: _forCompany, error: err('for_company'), onChanged: (v) => setState(() => _forCompany = v)),
+            MasterPickerRow(
+              label: 'Party (outgoing)',
+              placeholder: 'None',
+              provider: buyersProvider,
+              value: _party,
+              onChanged: (b) => setState(() => _party = b),
+              error: err('party_id'),
             ),
             ValueRow(
               label: 'Status',
@@ -176,6 +197,44 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Who the sample is for: one billing company (by code) or all of them.
+class _ForCompanyRow extends ConsumerWidget {
+  const _ForCompanyRow({required this.value, required this.onChanged, this.error});
+  final String? value;
+  final ValueChanged<String?> onChanged;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final companies = ref.watch(billingCompaniesProvider).value ?? const [];
+    String? shown = value == 'all' ? 'All companies' : value;
+    for (final c in companies) {
+      if (c.code == value) shown = c.name;
+    }
+    return ValueRow(
+      label: 'For',
+      value: shown,
+      placeholder: 'Not set',
+      error: error,
+      onTap: () async {
+        final list = await ref.read(billingCompaniesProvider.future);
+        if (!context.mounted) return;
+        final picked = await showPickerSheet<String>(
+          context,
+          title: 'Sample is for',
+          selected: value,
+          options: [
+            const PickOption('', 'Not set'),
+            const PickOption('all', 'All companies'),
+            for (final c in list) PickOption(c.code, c.name, subtitle: c.code == c.name ? null : c.code),
+          ],
+        );
+        if (picked != null) onChanged(picked.isEmpty ? null : picked);
+      },
     );
   }
 }

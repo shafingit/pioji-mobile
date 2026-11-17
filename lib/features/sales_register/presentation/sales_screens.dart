@@ -33,6 +33,7 @@ class SalesListScreen extends StatelessWidget {
       title: 'Sales register',
       inTabs: false,
       listProvider: salesListProvider,
+      sortField: 'deal_date',
       queryProvider: salesQueryProvider,
       searchHint: 'Search mark, invoice, buyer or entry',
       emptyIcon: AppIcons.sales,

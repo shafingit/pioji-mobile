@@ -17,6 +17,7 @@ import '../../../core/widgets/states.dart';
 import '../../offer_lists/data/offer_lists_repository.dart';
 import '../data/allocation_repository.dart';
 import '../../../core/design/app_icons.dart';
+import '../../auth/application/auth_controller.dart';
 
 class OfferedTodayScreen extends ConsumerStatefulWidget {
   const OfferedTodayScreen({super.key});
@@ -38,6 +39,10 @@ class _OfferedTodayScreenState extends ConsumerState<OfferedTodayScreen> {
       });
 
   Future<void> _allocate(List<OfferedItem> items, OfferedToday data) async {
+    if (!(ref.read(currentUserProvider)?.can('samples.allocate_buyers') ?? true)) {
+      context.toast("Your role can't allocate buyers.");
+      return;
+    }
     if (items.isEmpty || _busy) return;
     if (data.buyers.isEmpty) {
       context.toast('No buyers are available for this date.');

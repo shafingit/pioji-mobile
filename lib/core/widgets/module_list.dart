@@ -40,10 +40,10 @@ class ChoiceFilter extends FilterConfig {
 }
 
 /// A value picked from a sheet the screen provides (e.g. a mark from the
-/// garden list). [pick] returns the value to filter by.
+/// garden list). [pick] returns the value to send and the text to show.
 class PickerFilter extends FilterConfig {
   const PickerFilter(super.param, super.label, this.pick);
-  final Future<String?> Function(BuildContext context) pick;
+  final Future<({String value, String label})?> Function(BuildContext context) pick;
 }
 
 /// Groups list rows: a heading per [section], then rows sorted by
@@ -77,7 +77,7 @@ class ModuleListScreen<T> extends ConsumerStatefulWidget {
     this.inTabs = true,
     this.asCards = false,
     this.grouping,
-    this.sortable = false,
+    this.sortField,
   });
 
   final String title;
@@ -101,8 +101,9 @@ class ModuleListScreen<T> extends ConsumerStatefulWidget {
 
   final ListGrouping<T>? grouping;
 
-  /// Shows a Latest first / Earliest first switch.
-  final bool sortable;
+  /// Field for the Latest first / Earliest first switch (`sort_by`); none
+  /// hides the switch. Latest first is the API's default order.
+  final String? sortField;
 
   @override
   ConsumerState<ModuleListScreen<T>> createState() => _ModuleListScreenState<T>();
@@ -191,17 +192,7 @@ class _ModuleListScreenState<T> extends ConsumerState<ModuleListScreen<T>> {
             ),
           ];
         }
-        // Earliest first: the API can't sort yet, so load every page and
-        // reverse it here.
-        if (query.oldestFirst && s.hasMore) {
-          if (!s.loadingMore && s.loadMoreError == null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) ref.read(widget.listProvider.notifier).loadMore();
-            });
-          }
-          if (s.loadMoreError == null) return [const SliverToBoxAdapter(child: SkeletonList())];
-        }
-        final shown = query.oldestFirst ? s.items.reversed.toList() : s.items;
+        final shown = s.items;
         if (widget.grouping != null && !widget.asCards) {
           return [..._grouped(c, shown), SliverToBoxAdapter(child: _footer(c, s))];
         }
@@ -300,9 +291,12 @@ class _ModuleListScreenState<T> extends ConsumerState<ModuleListScreen<T>> {
       final shown = switch (f) {
         DateFilter() => Fmt.day(DateTime.tryParse(v)),
         ChoiceFilter(:final options) => options[v] ?? v,
-        PickerFilter() => v,
+        PickerFilter() => q.label(f.param) ?? v,
       };
-      chips.add(_Chip(label: '${f.label}: $shown', onRemove: () => ctl.setParam(f.param, null)));
+      chips.add(_Chip(label: '${f.label}: $shown', onRemove: () {
+        ctl.setParam(f.param, null);
+        ctl.setParam('_label.${f.param}', null);
+      }));
     }
     return Row(
       children: [
@@ -311,9 +305,13 @@ class _ModuleListScreenState<T> extends ConsumerState<ModuleListScreen<T>> {
             scrollDirection: Axis.horizontal,
             child: Row(children: [
               for (final ch in chips) Padding(padding: const EdgeInsets.only(right: 8), child: ch),
-              if (widget.sortable)
+              if (widget.sortField != null)
                 GestureDetector(
-                  onTap: () => ctl.setParam(kOrderParam, q.oldestFirst ? null : 'asc'),
+                  onTap: () {
+                    final asc = !q.oldestFirst;
+                    ctl.setParam('sort_by', asc ? widget.sortField : null);
+                    ctl.setParam('sort_dir', asc ? 'asc' : null);
+                  },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                     child: Row(children: [
@@ -437,7 +435,10 @@ class _FilterSheetState extends State<_FilterSheet> {
                 TextButton(
                   onPressed: () => setState(() => _q = ListQuery(
                         search: _q.search,
-                        params: {if (_q.oldestFirst) kOrderParam: 'asc'},
+                        params: {
+                          for (final k in ['sort_by', 'sort_dir'])
+                            if (_q.params[k] != null) k: _q.params[k]!,
+                        },
                       )),
                   child: const Text('Reset'),
                 ),
@@ -477,10 +478,12 @@ class _FilterSheetState extends State<_FilterSheet> {
                     PickerFilter(:final pick) => ValueRow(
                         label: f.label,
                         placeholder: 'Any',
-                        value: _q.params[f.param],
+                        value: _q.params[f.param] == null ? null : _q.label(f.param),
                         onTap: () async {
                           final picked = await pick(context);
-                          if (picked != null) setState(() => _q = _q.withParam(f.param, picked));
+                          if (picked != null) {
+                            setState(() => _q = _q.withParam(f.param, picked.value).withParam('_label.${f.param}', picked.label));
+                          }
                         },
                       ),
                   },

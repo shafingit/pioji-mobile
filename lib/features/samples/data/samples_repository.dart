@@ -21,6 +21,22 @@ class SamplesRepository {
 
   Future<void> delete(int id) => _api.delete('/samples/$id');
 
+  /// Saves tasting scores (0–10 each) and comments; the server works out the
+  /// overall score and marks the sample evaluated.
+  Future<void> saveTasting(int id, Map<String, Object?> body) => _api.post('/samples/$id/tasting', cleanBody(body));
+
+  Future<void> park(int id) => _api.post('/samples/$id/park', const <String, Object?>{});
+
+  Future<void> unpark(int id) => _api.post('/samples/$id/unpark', const <String, Object?>{});
+
+  /// `GET /reports/tasting`: tasted samples, filtered by `from` / `to` /
+  /// `garden_id`.
+  Future<List<Sample>> tastingReport(Map<String, Object?> query) async {
+    final data = J.map(await _api.getData('/reports/tasting', query: cleanQuery(query)));
+    final list = data?['samples'] as List? ?? const [];
+    return list.whereType<Map<String, dynamic>>().map(Sample.fromJson).toList();
+  }
+
   Future<Sample?> create(Map<String, Object?> body) async {
     final data = await _api.post('/samples', cleanBody(body));
     final map = J.map(data);

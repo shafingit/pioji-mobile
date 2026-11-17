@@ -89,9 +89,39 @@ class BidBookRepository {
 
   Future<Page<Bid>> list(ListQuery q, {int page = 1}) => _api.page('/bid-book', Bid.fromJson, query: q.toQuery(), page: page);
 
+  /// Up to 200 lots of one tab (`open`, `parked`, …), sorted by mark then
+  /// invoice, for picking several at once.
+  Future<List<Bid>> listForPicking(String tab) async {
+    final p = await _api.page('/bid-book', Bid.fromJson, query: {'tab': tab, 'sort_by': 'garden_name', 'sort_dir': 'asc'}, perPage: 200);
+    return p.items;
+  }
+
   Future<void> create(Map<String, Object?> body) => _api.post('/bid-book', cleanBody(body));
 
   Future<void> update(int id, Map<String, Object?> body) => _api.put('/bid-book/$id', body);
+
+  /// `POST /bid-book/bulk`: creates several lots. Returns the new ids and,
+  /// per row index, the server's first error for rows that failed.
+  Future<({List<int> created, Map<int, String> errors})> bulkCreate(List<Map<String, Object?>> items) async {
+    final data = J.map(await _api.post('/bid-book/bulk', {'items': [for (final i in items) cleanBody(i)]})) ?? const {};
+    final errors = <int, String>{};
+    for (final e in (data['errors'] as List? ?? const []).whereType<Map<String, dynamic>>()) {
+      final index = J.integer(e['index']);
+      final fields = J.map(e['errors']) ?? const {};
+      if (index == null) continue;
+      // A raw database error isn't shown as is; field errors are.
+      final first = fields.entries.where((f) => f.key != 'exception').map((f) => f.value is List ? (f.value as List).first.toString() : f.value.toString()).firstOrNull;
+      errors[index] = first ?? "The server couldn't save this lot.";
+    }
+    return (created: J.ints(data['created_ids']), errors: errors);
+  }
+
+  /// `PATCH /bid-book/bulk`: sets the asking price and/or max bid on several lots.
+  Future<void> bulkUpdate(List<int> ids, {double? incoming, double? maxBid}) => _api.patch('/bid-book/bulk', {
+        'ids': ids,
+        'seller_incoming_price': ?incoming,
+        'max_bid': ?maxBid,
+      });
 }
 
 final bidBookRepositoryProvider = Provider((ref) => BidBookRepository(ref.watch(apiProvider)));

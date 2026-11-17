@@ -42,48 +42,31 @@ class ShellScaffold extends StatelessWidget {
       );
     }
     return Scaffold(
-      extendBody: true,
       body: shell,
       bottomNavigationBar: _BottomBar(current: shell.currentIndex, onTap: _go),
     );
   }
 }
 
-/// No top border, no blur. One gradient that is transparent at the top,
-/// solid by the icons, and keeps deepening to the bottom edge.
+/// Solid bar in the surface colour with a hairline on top. Content ends
+/// above it instead of scrolling underneath.
 class _BottomBar extends StatelessWidget {
   const _BottomBar({required this.current, required this.onTap});
   final int current;
   final ValueChanged<int> onTap;
 
-  static const _fade = 60.0;
-  static const _bar = 56.0;
-
-  static double _ease(double x) => x * x * x * (x * (x * 6 - 15) + 10);
-
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final safe = MediaQuery.of(context).padding.bottom;
-    final total = _fade + _bar + safe;
-    final solidAt = _fade / total;
-    final colors = <Color>[];
-    final stops = <double>[];
-    for (var i = 0; i <= 24; i++) {
-      final p = i / 24;
-      final alpha = _ease((p / solidAt).clamp(0, 1));
-      final tone = Color.lerp(c.background, c.barDeep, _ease(p))!;
-      colors.add(tone.withValues(alpha: alpha));
-      stops.add(p);
-    }
-    return IgnorePointer(
-      ignoring: false,
-      child: Container(
-        height: total,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: colors, stops: stops),
-        ),
-        padding: EdgeInsets.only(top: _fade, bottom: safe),
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(top: BorderSide(color: c.separator, width: 0.5)),
+      ),
+      padding: EdgeInsets.only(top: 6, bottom: safe > 0 ? safe : 6),
+      child: SizedBox(
+        height: 54,
         child: Row(
           children: [
             for (var i = 0; i < _tabs.length; i++)

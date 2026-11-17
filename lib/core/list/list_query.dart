@@ -10,7 +10,8 @@ class ListQuery {
   final String search;
   final Map<String, String> params;
 
-  bool get hasFilters => params.keys.any((k) => !k.startsWith('_'));
+  /// Sort keys and app-only `_` keys (labels for chips) aren't filters.
+  bool get hasFilters => params.keys.any((k) => !k.startsWith('_') && k != 'sort_by' && k != 'sort_dir');
 
   ListQuery withSearch(String value) => ListQuery(search: value, params: params);
 
@@ -26,20 +27,18 @@ class ListQuery {
 
   ListQuery cleared() => ListQuery(search: search);
 
-  /// Keys starting with `_` are app-only. `mark` is sent as the search text
-  /// too, because the API filters marks only through `search` (Nov 2026);
-  /// `sort_dir` is sent for when the API supports sorting.
-  Map<String, Object?> toQuery() {
-    final p = {...params}..removeWhere((k, _) => k.startsWith('_'));
-    final mark = p['mark'];
-    return {
-      'search': mark ?? search,
-      if (params[kOrderParam] == 'asc') 'sort_dir': 'asc',
-      ...p,
-    };
-  }
+  /// Keys starting with `_` are app-only (e.g. `_label.garden_id`, the name
+  /// shown on a filter chip) and are never sent.
+  Map<String, Object?> toQuery() => {
+        'search': search,
+        ...{...params}..removeWhere((k, _) => k.startsWith('_')),
+      };
 
-  bool get oldestFirst => params[kOrderParam] == 'asc';
+  /// Earliest first: `sort_dir=asc` (the API sorts since 17 Nov 2026).
+  bool get oldestFirst => params['sort_dir'] == 'asc';
+
+  /// The chip text for a picker filter's value.
+  String? label(String param) => params['_label.$param'] ?? params[param];
 
   @override
   bool operator ==(Object other) =>
@@ -48,9 +47,6 @@ class ListQuery {
   @override
   int get hashCode => Object.hash(search, Object.hashAllUnordered(params.entries.map((e) => '${e.key}=${e.value}')));
 }
-
-/// App-side sort order: `asc` = earliest first. Not sent as is.
-const kOrderParam = '_order';
 
 class ListQueryNotifier extends Notifier<ListQuery> {
   ListQueryNotifier([this.initial = const ListQuery()]);

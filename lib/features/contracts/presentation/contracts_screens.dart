@@ -33,6 +33,7 @@ class ContractsListScreen extends StatelessWidget {
       title: 'Contracts',
       inTabs: false,
       listProvider: contractsListProvider,
+      sortField: 'effective_date',
       queryProvider: contractsQueryProvider,
       searchHint: 'Search title, number or seller',
       emptyIcon: AppIcons.document,

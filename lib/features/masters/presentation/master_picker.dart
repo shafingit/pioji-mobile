@@ -15,14 +15,15 @@ import '../data/masters_repository.dart';
 import '../../../core/design/app_icons.dart';
 import '../../../core/widgets/controls.dart';
 
-/// Opens the full garden list to pick a mark (used by list filters).
-Future<String?> pickMark(BuildContext context) async {
+/// Opens the full garden list to pick a mark (used by list filters):
+/// filters by `garden_id`, shows the garden name.
+Future<({String value, String label})?> pickMark(BuildContext context) async {
   final g = await showModalBottomSheet<MasterItem>(
     context: context,
     isScrollControlled: true,
     builder: (_) => _RemoteSearchSheet(title: 'Mark', path: '/gardens', initial: gardensProvider),
   );
-  return g?.name;
+  return g == null ? null : (value: '${g.id}', label: g.name);
 }
 
 class _RemoteSearchSheet extends ConsumerStatefulWidget {
@@ -326,9 +327,13 @@ class _CreatableSheetState extends ConsumerState<_CreatableSheet> {
 
 /// Grade picker from `GET /grades`, falling back to the built-in list.
 class GradePickerRow extends ConsumerWidget {
-  const GradePickerRow({super.key, required this.value, required this.onChanged, this.error, this.label = 'Grade'});
+  const GradePickerRow({super.key, required this.value, required this.onChanged, this.error, this.label = 'Grade', this.gardenId});
 
   final String? value;
+
+  /// When set, only the grades set up for this garden are offered
+  /// (`GET /gardens/{id}/grades`), falling back to every grade if it has none.
+  final int? gardenId;
   final ValueChanged<String> onChanged;
   final String? error;
   final String label;
@@ -340,13 +345,16 @@ class GradePickerRow extends ConsumerWidget {
       value: value,
       error: error,
       onTap: () async {
-        final grades = await ref.read(gradesProvider.future);
+        final forGarden = gardenId == null ? const <({String code, String? type})>[] : await ref.read(gardenGradesProvider(gardenId!).future);
+        final grades = forGarden.isNotEmpty ? const <String>[] : await ref.read(gradesProvider.future);
         if (!context.mounted) return;
         final picked = await showPickerSheet<String>(
           context,
-          title: label,
+          title: forGarden.isNotEmpty ? '$label for this garden' : label,
           selected: value,
-          options: [for (final g in grades) PickOption(g, g)],
+          options: forGarden.isNotEmpty
+              ? [for (final g in forGarden) PickOption(g.code, g.code, subtitle: g.type)]
+              : [for (final g in grades) PickOption(g, g)],
         );
         if (picked != null) onChanged(picked);
       },

@@ -65,6 +65,15 @@ class Api {
     return unwrap(res.data);
   }
 
+  Future<Object?> patch(String path, Map<String, Object?> body) async {
+    final res = await _guard(() => dio.patch<dynamic>(
+          path,
+          data: body,
+          options: Options(contentType: Headers.jsonContentType),
+        ));
+    return unwrap(res.data);
+  }
+
   Future<Response<dynamic>> _guard(Future<Response<dynamic>> Function() call) async {
     final res = await _send(call);
     _checkEnvelope(res);

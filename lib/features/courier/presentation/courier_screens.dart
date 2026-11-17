@@ -38,6 +38,7 @@ class CourierListScreen extends StatelessWidget {
       title: 'Courier register',
       inTabs: false,
       listProvider: courierListProvider,
+      sortField: 'entry_date',
       queryProvider: courierQueryProvider,
       searchHint: 'Search entry, tracking, courier or buyer',
       emptyIcon: AppIcons.courier,
@@ -109,7 +110,12 @@ class _CourierFormScreenState extends ConsumerState<CourierFormScreen> with Form
   }
 
   Future<void> _onBuyer(MasterItem? b) async {
-    setState(() => _buyer = b);
+    // Posting lists depend on the buyer, so a new buyer clears them.
+    final changed = b?.id != _buyer?.id;
+    setState(() {
+      _buyer = b;
+      if (changed) _postingIds = <int>{};
+    });
     if (b == null) return;
     try {
       final a = await ref.read(courierRepositoryProvider).buyerAddress(b.id);
@@ -146,10 +152,14 @@ class _CourierFormScreenState extends ConsumerState<CourierFormScreen> with Form
   }
 
   Future<void> _pickPosting() async {
-    final items = await ref.read(postingListsProvider.future);
+    // Only the selected buyer's posting lists (`?buyer_id=`).
+    final buyerId = _toBuyer ? _buyer?.id : null;
+    final items = buyerId == null
+        ? await ref.read(postingListsProvider.future)
+        : await ref.read(buyerPostingListsProvider(buyerId).future);
     if (!mounted) return;
     if (items.isEmpty) {
-      context.toast("Posting lists aren't available yet.");
+      context.toast(buyerId == null ? "Posting lists aren't available yet." : 'No posting lists for this buyer.');
       return;
     }
     final sel = await showMultiPickerSheet<int>(

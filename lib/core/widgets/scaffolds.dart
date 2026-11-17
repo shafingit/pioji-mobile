@@ -10,8 +10,9 @@ import 'one_line_text.dart';
 import 'states.dart';
 import '../design/app_icons.dart';
 
-/// Height reserved at the bottom of tab screens for the tab bar.
-const kTabBarReserve = 120.0;
+/// Space under the last item on tab screens (the bar is solid, so nothing
+/// scrolls under it).
+const kTabBarReserve = 24.0;
 
 /// Fixed 56 px top bar: optional back or close button, title (with an
 /// optional caption under it) and actions on the right.
