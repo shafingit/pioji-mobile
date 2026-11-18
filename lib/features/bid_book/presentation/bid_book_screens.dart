@@ -9,6 +9,7 @@ import '../../../core/design/typography.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../../core/router/routes.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/json.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/buttons.dart';
 import '../../../core/widgets/delete_record_button.dart';
@@ -18,20 +19,19 @@ import '../../../core/widgets/form_submit.dart';
 import '../../../core/widgets/module_list.dart';
 import '../../../core/widgets/one_line_text.dart';
 import '../../../core/widgets/scaffolds.dart';
-import '../../../core/widgets/sheets.dart';
 import '../../../core/widgets/states.dart';
-import '../../../core/widgets/status_badge.dart';
+import '../../masters/data/form_options.dart';
 import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/bid_book_repository.dart';
 import '../../../core/design/app_icons.dart';
 import '../../../core/widgets/extra_fields.dart';
 
-class BidBookScreen extends StatelessWidget {
+class BidBookScreen extends ConsumerWidget {
   const BidBookScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ModuleListScreen<Bid>(
       title: 'Bid book',
       listProvider: bidBookListProvider,
@@ -47,15 +47,9 @@ class BidBookScreen extends StatelessWidget {
         LinkButton(label: 'Bulk', onPressed: () => context.pushNamed(Routes.bidBulk)),
         AddButton(semanticLabel: 'New lot', onPressed: () => context.pushNamed(Routes.bidNew)),
       ],
-      segments: const SegmentConfig(param: 'tab', options: {
-        'all': 'All',
-        'open': 'Open',
-        'parked': 'Parked',
-        'held': 'Held',
-        'awaiting_allocation': 'Awaiting',
-      }),
+      segments: SegmentConfig(param: 'tab', options: watchFormOptions(ref).map('bid_book_tabs')),
       filters: [
-        ChoiceFilter('grade', 'Grade', {for (final g in kTeaGrades) g: g}),
+        ChoiceFilter('grade', 'Grade', {for (final g in ref.watch(gradesProvider).value ?? const <String>[]) g: g}),
         const PickerFilter('garden_id', 'Mark', pickMark),
       ],
       // All lots of one mark together, in invoice order.
@@ -100,7 +94,7 @@ class BidRow extends StatelessWidget {
                 Text('Max ', style: figures.copyWith(color: c.textTertiary)),
                 Text(_price(b.maxBid), style: figures.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
                 const SizedBox(width: AppSpace.md),
-                StatusBadge(b.status.label, tone: b.status.tone),
+                OptionBadge(list: 'bid_statuses', value: b.status),
               ],
             ),
           ),
@@ -137,10 +131,33 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
   late final _pencil = TextEditingController(text: Fmt.editable(_e?.pencil));
   late final _remarks = TextEditingController(text: _e?.remarks);
   late String? _grade = _e?.grade;
-  late BidStatus _status = _e?.status ?? BidStatus.open;
+  late String? _status = _e?.status;
   late MasterItem? _buyer = _e?.buyerId == null ? null : MasterItem(_e!.buyerId!, _e.buyerName ?? '#${_e.buyerId}');
   late MasterItem? _negotiator =
       _e?.negotiatorId == null ? null : MasterItem(_e!.negotiatorId!, _e.negotiatorName ?? '#${_e.negotiatorId}');
+
+  bool _looking = false;
+
+  /// Fills grade, packages, weight and price from the offer list
+  /// (`GET /bid-book/search-offer-list`), like the website.
+  Future<void> _lookupOffer() async {
+    if (_looking) return;
+    setState(() => _looking = true);
+    final lot = await ref.read(bidBookRepositoryProvider).searchOfferList(_garden.text.trim(), _invoice.text.trim());
+    if (!mounted) return;
+    setState(() => _looking = false);
+    if (lot == null) {
+      context.toast('No offer found for this garden and invoice.');
+      return;
+    }
+    setState(() {
+      if (J.str(lot['grade']) ?? J.str(lot['tea_grade']) case final v?) _grade = v;
+      if (J.integer(lot['packages']) case final v?) _pkgs.text = '$v';
+      if (J.dbl(lot['net_weight']) case final v?) _net.text = Fmt.editable(v);
+      if (J.dbl(lot['price']) case final v?) _incoming.text = Fmt.editable(v);
+    });
+    context.toast('Filled from the offer list');
+  }
 
   @override
   void dispose() {
@@ -163,7 +180,7 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
       'max_bid': Fmt.parse(_max.text),
       'negotiated_price': Fmt.parse(_neg.text),
       'pencil_price': Fmt.parse(_pencil.text),
-      'status': _status.api,
+      'status': _status ?? ref.read(formOptionsProvider).value?.initial('bid_statuses'),
       'buyer_id': _buyer?.id,
       'negotiator_id': _negotiator?.id,
       'remarks': _remarks.text.trim(),
@@ -207,9 +224,14 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
         GroupedSection(
           label: 'Lot',
           children: [
-            FieldInput(label: 'Garden or mark', hint: 'Assam Valley', controller: _garden, error: err('garden_name')),
+            FieldInput(label: 'Garden or mark', hint: 'Assam Valley', controller: _garden, error: err('garden_name'), onChanged: (_) => setState(() {})),
+            FieldInput(label: 'Invoice number', hint: 'INV-BB-891', controller: _invoice, error: err('invoice_number'), onChanged: (_) => setState(() {})),
+            LookupButton(
+              label: 'Fill from offer list',
+              busy: _looking,
+              onPressed: _garden.text.trim().isEmpty || _invoice.text.trim().isEmpty ? null : _lookupOffer,
+            ),
             GradePickerRow(value: _grade, onChanged: (g) => setState(() => _grade = g), error: err('grade')),
-            FieldInput(label: 'Invoice number', hint: 'INV-BB-891', controller: _invoice, error: err('invoice_number')),
             Row(children: [
               Expanded(child: FieldInput(label: 'Packages', hint: '30', controller: _pkgs, error: err('packages'), keyboardType: TextInputType.number, inputFormatters: digitsOnly)),
               Expanded(child: FieldInput(label: 'Net weight', hint: '1050', suffix: 'kg', controller: _net, error: err('net_weight'), keyboardType: money(), inputFormatters: decimalOnly)),
@@ -233,16 +255,7 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
           label: 'Assignment',
           footer: const Text('Leave the buyer empty to keep the lot unallocated.'),
           children: [
-            ValueRow(
-              label: 'Status',
-              value: _status.label,
-              error: err('status'),
-              onTap: () async {
-                final s = await showPickerSheet<BidStatus>(context,
-                    title: 'Status', selected: _status, options: [for (final s in BidStatus.values) PickOption(s, s.label)]);
-                if (s != null) setState(() => _status = s);
-              },
-            ),
+            OptionRow(label: 'Status', list: 'bid_statuses', value: _status ?? watchFormOptions(ref).initial('bid_statuses'), error: err('status'), onChanged: (v) => setState(() => _status = v)),
             MasterPickerRow(label: 'Buyer', provider: buyersProvider, value: _buyer, placeholder: 'Unallocated', onChanged: (b) => setState(() => _buyer = b), error: err('buyer_id')),
             MasterPickerRow(label: 'Negotiator', provider: negotiatorsProvider, value: _negotiator, placeholder: 'None', onChanged: (n) => setState(() => _negotiator = n), error: err('negotiator_id')),
           ],
@@ -263,20 +276,20 @@ class BidDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _BidDetailScreenState extends ConsumerState<BidDetailScreen> {
-  late BidStatus? _status = widget.bid?.status;
+  late String? _status = widget.bid?.status;
   bool _busy = false;
 
-  Future<void> _setStatus(BidStatus s) async {
+  Future<void> _setStatus(String s) async {
     final b = widget.bid!;
     if (_busy || s == _status) return;
     setState(() => _busy = true);
     try {
-      await ref.read(bidBookRepositoryProvider).update(b.id, {'status': s.api});
+      await ref.read(bidBookRepositoryProvider).update(b.id, {'status': s});
       if (!mounted) return;
       setState(() => _status = s);
       ref.invalidate(bidBookListProvider);
       refreshSummaries(ref);
-      context.toast('Lot marked ${s.label.toLowerCase()}');
+      context.toast('Status changed to ${ref.read(formOptionsProvider).value?.label('bid_statuses', s) ?? s}');
     } on AppFailure catch (f) {
       if (mounted) context.toast(f.message);
     } finally {
@@ -301,7 +314,7 @@ class _BidDetailScreenState extends ConsumerState<BidDetailScreen> {
             children: [
               Row(children: [
                 Expanded(child: OneLineText('${b.grade} · ${b.invoiceNumber}', style: AppText.headline)),
-                StatusBadge(status.label, tone: status.tone),
+                OptionBadge(list: 'bid_statuses', value: status),
               ]),
               const SizedBox(height: AppSpace.lg),
               for (final (label, v, strong) in [
@@ -333,14 +346,7 @@ class _BidDetailScreenState extends ConsumerState<BidDetailScreen> {
         GroupedSection(
           label: 'Change status',
           children: [
-            Padding(
-              padding: const EdgeInsets.all(AppSpace.sm),
-              child: Segmented<BidStatus>(
-                options: {for (final s in BidStatus.values) s: s.label},
-                selected: status,
-                onChanged: _setStatus,
-              ),
-            ),
+            OptionRow(label: 'Status', list: 'bid_statuses', value: status, onChanged: _setStatus),
           ],
         ),
         if (extraInfoRows(kBidExtraFields, b.raw).isNotEmpty) GroupedSection(label: 'More details', children: extraInfoRows(kBidExtraFields, b.raw)),

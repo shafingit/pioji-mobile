@@ -7,20 +7,6 @@ import '../../../core/network/api.dart';
 import '../../../core/network/dio_provider.dart';
 import '../../../core/network/paginated.dart';
 import '../../../core/utils/json.dart';
-import '../../../core/widgets/status_badge.dart';
-
-enum SaleStatus {
-  pending('pending', 'Pending', Tone.warning),
-  approved('approved', 'Approved', Tone.success),
-  rejected('rejected', 'Rejected', Tone.danger);
-
-  const SaleStatus(this.api, this.label, this.tone);
-  final String api;
-  final String label;
-  final Tone tone;
-
-  static SaleStatus parse(Object? v) => values.firstWhere((s) => s.api == v?.toString(), orElse: () => pending);
-}
 
 class SaleEntry {
   const SaleEntry({
@@ -41,7 +27,7 @@ class SaleEntry {
     this.transport,
     this.discount,
     this.remarks,
-    this.status = SaleStatus.pending,
+    this.status,
     this.splitCount = 1,
     this.totalPkgs,
     this.totalQuantity,
@@ -67,7 +53,8 @@ class SaleEntry {
   final String? transport;
   final double? discount;
   final String? remarks;
-  final SaleStatus status;
+  /// API status value; labels are in `form-options` → `sale_statuses`.
+  final String? status;
 
   /// A sale split between buyers is stored as one record per split; the list
   /// shows it once, with the totals of all splits.
@@ -132,7 +119,7 @@ class SaleEntry {
         transport: J.str(j['transport']),
         discount: J.dbl(j['discount']),
         remarks: J.str(j['remarks']),
-        status: SaleStatus.parse(j['status']),
+        status: J.str(j['status']),
         splitCount: J.intOr(j['split_count'], 1),
         totalPkgs: J.integer(j['aggregated_pkgs']),
         totalQuantity: J.dbl(j['aggregated_quantity_kg']),
@@ -143,6 +130,16 @@ class SaleEntry {
 class SalesRepository {
   const SalesRepository(this._api);
   final Api _api;
+
+  /// What the website fills in when a garden is picked: incharge, category,
+  /// location, billing company (`GET /sales-register/garden-info`).
+  Future<Map<String, dynamic>?> gardenInfo(int gardenId) =>
+      _api.lookup('/sales-register/garden-info', query: {'garden_id': gardenId});
+
+  /// A lot's details from its samples and offers, by mark and invoice
+  /// (`GET /sales-register/lookup-lot`).
+  Future<Map<String, dynamic>?> lookupLot(String mark, String invoiceNo) =>
+      _api.lookup('/sales-register/lookup-lot', query: {'mark': mark, 'invoice_no': invoiceNo});
 
   Future<SaleEntry> get(int id) async => SaleEntry.fromJson(await _api.one('/sales-register/$id'));
 

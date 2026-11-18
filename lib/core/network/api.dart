@@ -31,6 +31,19 @@ class Api {
     return unwrap(res.data);
   }
 
+  /// A website lookup (`GET`): its data map, or null when nothing matched
+  /// (`success: false`, a failed request or an empty answer).
+  Future<Map<String, dynamic>?> lookup(String path, {Map<String, Object?> query = const {}}) async {
+    try {
+      final res = await _guard(() => dio.get<dynamic>(path, queryParameters: cleanQuery(query)));
+      final body = res.data;
+      if (body is Map && body['success'] == false) return null;
+      return J.map(unwrap(body));
+    } on AppFailure {
+      return null;
+    }
+  }
+
   /// One record from `GET /{module}/{id}`. Accepts the record itself or a
   /// wrapper like `{sample: {...}}` inside the envelope.
   Future<Map<String, dynamic>> one(String path) async {

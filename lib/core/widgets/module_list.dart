@@ -138,7 +138,8 @@ class _ModuleListScreenState<T> extends ConsumerState<ModuleListScreen<T>> {
       ...widget.header,
       SearchField(hint: widget.searchHint, initial: query.search, onChanged: queryCtl.setSearch),
       const SizedBox(height: AppSpace.md),
-      if (seg != null) ...[
+      // API-driven segments appear once their options have loaded.
+      if (seg != null && seg.options.isNotEmpty) ...[
         // Up to 4 options fill the width; more scroll sideways at their
         // natural width (a stretched bar can't sit in a scroll view).
         if (seg.options.length > 4)

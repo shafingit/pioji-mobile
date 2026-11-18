@@ -40,6 +40,31 @@ class MasterItem {
   }
 }
 
+/// A grade set up for a garden.
+class GardenGrade {
+  const GardenGrade({this.id, required this.code, required this.name, this.invoiceType});
+  final int? id;
+  final String code;
+  final String name;
+  final String? invoiceType;
+}
+
+/// A garden's grades, invoice types and invoice prefixes per type.
+class GardenOptions {
+  const GardenOptions({this.grades = const [], this.invoiceTypes = const [], this.prefixes = const {}});
+  static const empty = GardenOptions();
+
+  final List<GardenGrade> grades;
+  final List<String> invoiceTypes;
+  final Map<String, List<String>> prefixes;
+
+  GardenGrade? grade(String? code) => grades.where((g) => g.code == code).firstOrNull;
+
+  /// Prefixes for an invoice type, or every prefix when the type is unknown.
+  List<String> prefixesFor(String? invoiceType) =>
+      prefixes[invoiceType] ?? {for (final l in prefixes.values) ...l}.toList();
+}
+
 /// Lookup lists for pickers. A failure returns an empty list, which makes the
 /// picker fall back to typing an ID.
 class MastersRepository {
@@ -101,10 +126,9 @@ class MastersRepository {
         if (!p.hasMore) break;
         page++;
       }
-      final list = names.toList()..sort();
-      return list.isEmpty ? kTeaGrades : list;
+      return names.toList()..sort();
     } catch (_) {
-      return kTeaGrades;
+      return const [];
     }
   }
 
@@ -140,18 +164,26 @@ class MastersRepository {
     }
   }
 
-  /// Grades set up for one garden (`GET /gardens/{id}/grades`): code plus tea
-  /// type. Empty when the garden has none set up.
-  Future<List<({String code, String? type})>> gardenGrades(int gardenId) async {
+  /// What one garden offers (`GET /gardens/{id}/options`): its grades with
+  /// their invoice type, its invoice types and the prefixes for each.
+  Future<GardenOptions> gardenOptions(int gardenId) async {
     try {
-      final data = await _api.getData('/gardens/$gardenId/grades');
-      final list = data is List ? data : (J.map(data)?['grades'] as List? ?? const []);
-      return [
-        for (final g in list.whereType<Map<String, dynamic>>())
-          if (J.str(g['code']) != null) (code: J.str(g['code'])!, type: J.str(g['tea_type'])),
-      ];
+      final data = J.map(await _api.getData('/gardens/$gardenId/options')) ?? const {};
+      final prefixes = J.map(data['invoice_prefixes']) ?? const {};
+      return GardenOptions(
+        grades: [
+          for (final g in (data['grades'] is List ? data['grades'] as List : const []).whereType<Map<String, dynamic>>())
+            if (J.str(g['grade_code']) case final code?)
+              GardenGrade(id: J.integer(g['id']), code: code, name: J.str(g['grade_name']) ?? code, invoiceType: J.str(g['invoice_type'])),
+        ],
+        invoiceTypes: [for (final t in (data['invoice_types'] is List ? data['invoice_types'] as List : const [])) t.toString()],
+        prefixes: {
+          for (final e in prefixes.entries)
+            if (e.value is List) e.key: [for (final p in e.value as List) p.toString()],
+        },
+      );
     } catch (_) {
-      return const [];
+      return GardenOptions.empty;
     }
   }
 
@@ -161,6 +193,18 @@ class MastersRepository {
     final data = J.map(await _api.post(path, {nameKey: name})) ?? const {};
     final record = data.containsKey('id') ? data : data.values.whereType<Map<String, dynamic>>().firstWhere((v) => v.containsKey('id'), orElse: () => const {});
     return MasterItem.fromJson(record) ?? (throw StateError('The server did not return the new record.'));
+  }
+
+  /// Posting lists with items still to send to a buyer
+  /// (`GET /courier-entries/pending-posting-lists/{buyer}`).
+  Future<List<MasterItem>> pendingPostingLists(int buyerId) async {
+    final data = await _api.lookup('/courier-entries/pending-posting-lists/$buyerId');
+    final lists = data?['lists'] is List ? data!['lists'] as List : const [];
+    return [
+      for (final l in lists.whereType<Map<String, dynamic>>())
+        if (J.integer(l['id']) case final id?)
+          MasterItem(id, J.str(l['name']) ?? '#$id', subtitle: '${(l['items'] as List?)?.length ?? 0} items'),
+    ];
   }
 
   Future<List<MasterItem>> buyers() async {
@@ -197,21 +241,18 @@ final sellersProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvid
 final negotiatorsProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).list('/negotiators'));
 final postingListsProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).list('/posting-lists'));
 
-/// Posting lists holding samples for one buyer (`?buyer_id=`).
+/// Posting lists with items still to send to one buyer.
 final buyerPostingListsProvider = FutureProvider.family<List<MasterItem>, int>(
-  (ref, buyerId) => ref.read(mastersRepositoryProvider).list('/posting-lists', query: {'buyer_id': buyerId}),
+  (ref, buyerId) => ref.read(mastersRepositoryProvider).pendingPostingLists(buyerId),
 );
 
 final invoiceTypesProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).invoiceTypes());
 final billingCompaniesProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).billingCompanies());
 
-/// Grades set up for one garden.
-final gardenGradesProvider = FutureProvider.family<List<({String code, String? type})>, int>(
-  (ref, gardenId) => ref.read(mastersRepositoryProvider).gardenGrades(gardenId),
+/// Grades, invoice types and prefixes for one garden.
+final gardenOptionsProvider = FutureProvider.family<GardenOptions, int>(
+  (ref, gardenId) => ref.read(mastersRepositoryProvider).gardenOptions(gardenId),
 );
 final courierOptionsProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).courierOptions());
 final gradesProvider = FutureProvider((ref) => ref.read(mastersRepositoryProvider).grades());
 
-/// Fallback grades, used when `GET /grades` returns nothing, and for the
-/// grade filter on list screens.
-const kTeaGrades = ['BOP', 'BOPSM', 'BP', 'OF', 'PD', 'Dust', 'FOP', 'OP', 'PEKOE'];

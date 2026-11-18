@@ -4,6 +4,7 @@ import '../design/context_ext.dart';
 import '../design/tokens.dart';
 import '../design/typography.dart';
 import '../design/app_icons.dart';
+import 'controls.dart';
 
 /// Deep filled button. While [loading] it shows a spinner and ignores taps,
 /// so a form can never be submitted twice.
@@ -166,6 +167,44 @@ class CircleIconButton extends StatelessWidget {
             shadows: tinted ? null : c.cardShadow,
           ),
           child: AppIcon(icon, size: 21, color: tinted ? c.accent : c.textSecondary),
+        ),
+      ),
+    );
+  }
+}
+
+/// A "Fill from …" action inside a form section: looks something up and
+/// fills the fields from it. Greyed out until it has what it needs.
+class LookupButton extends StatelessWidget {
+  const LookupButton({super.key, required this.label, required this.onPressed, this.busy = false});
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final enabled = onPressed != null && !busy;
+    final color = enabled ? c.accent : c.textTertiary;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? onPressed : null,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(children: [
+              if (busy) AppSpinner(size: 16, color: color) else AppIcon(AppIcons.docSearch, size: 18, color: color),
+              const SizedBox(width: 8),
+              Text(label, style: AppText.callout.copyWith(color: color)),
+            ]),
+          ),
         ),
       ),
     );

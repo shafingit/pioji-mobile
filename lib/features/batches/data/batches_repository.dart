@@ -9,17 +9,22 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/json.dart';
 import '../../samples/domain/sample.dart';
 
+/// Samples per batch when a batch doesn't say (`max_samples`), for the
+/// new-batch screens before any batch exists.
 const kBatchCap = 48;
 
 class Batch {
-  const Batch({required this.id, required this.name, this.date, required this.open, this.notes, this.sampleCount, this.samples = const []});
+  const Batch({required this.id, required this.name, this.date, this.status, this.notes, this.sampleCount, this.maxSamples, this.samples = const []});
 
   final int id;
   final String name;
   final DateTime? date;
-  final bool open;
+  /// API status value; labels are in `form-options` → `batch_statuses`.
+  final String? status;
   final String? notes;
   final int? sampleCount;
+  final int? maxSamples;
+  int get cap => maxSamples ?? kBatchCap;
   final List<Sample> samples;
 
   int get count => sampleCount ?? samples.length;
@@ -33,9 +38,10 @@ class Batch {
       id: J.intOr(j['id'], 0),
       name: J.str(j['batch_number']) ?? J.str(j['batch_name']) ?? J.str(j['name']) ?? 'Batch #${j['id']}',
       date: J.date(j['batch_date'] ?? j['date']),
-      open: (J.str(j['status']) ?? 'open') == 'open', // API statuses: open, completed
+      status: J.str(j['status']),
       notes: J.str(j['remarks']) ?? J.str(j['notes']),
       sampleCount: J.integer(j['samples_count'] ?? j['total_samples']),
+      maxSamples: J.integer(j['max_samples']),
       samples: samples,
     );
   }
@@ -54,11 +60,11 @@ class BatchesRepository {
   Future<Page<Batch>> list(ListQuery q, {int page = 1}) =>
       _api.page('/batches', Batch.fromJson, query: q.toQuery(), page: page);
 
-  Future<void> create({String? name, required DateTime date, required bool open, String? notes, required List<int> sampleIds}) =>
+  Future<void> create({String? name, required DateTime date, String? status, String? notes, required List<int> sampleIds}) =>
       _api.post('/batches', cleanBody({
         'batch_name': name,
         'batch_date': Fmt.api(date),
-        'status': open ? 'open' : 'completed',
+        'status': status,
         'remarks': notes,
         'sample_ids': sampleIds,
       }));

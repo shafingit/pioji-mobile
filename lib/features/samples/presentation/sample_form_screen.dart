@@ -6,6 +6,7 @@ import '../../../core/application/invalidation.dart';
 import '../../../core/design/context_ext.dart';
 import '../../../core/router/routes.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/json.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/fields.dart';
 import '../../../core/widgets/form_submit.dart';
@@ -15,6 +16,7 @@ import '../../../core/widgets/states.dart';
 import '../../../core/widgets/weight_fields.dart';
 import '../../../core/widgets/detail.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../masters/data/form_options.dart';
 import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/samples_repository.dart';
@@ -47,11 +49,10 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
   late MasterItem? _garden =
       _e?.gardenId == null ? null : MasterItem(_e!.gardenId!, _e.gardenName ?? '#${_e.gardenId}');
   late String? _grade = _e?.grade;
-  late String _type = (_e?.sampleType ?? 'original').toLowerCase();
+  late String? _type = _e?.sampleType?.toLowerCase();
   late String? _forCompany = _e?.forCompany;
   late MasterItem? _party = _e?.partyId == null ? null : MasterItem(_e!.partyId!, _e.partyName ?? '#${_e.partyId}');
-  late SampleStatus _status =
-      _e == null || _e.status == SampleStatus.unknown ? SampleStatus.received : _e.status;
+  late String? _status = _e?.status;
   late final _prefix = TextEditingController(text: _e?.invoicePrefix);
   late final _inv = TextEditingController(text: _e?.invoiceNo);
   late final _pkgs = TextEditingController(text: _e?.packages?.toString());
@@ -68,25 +69,67 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
     super.dispose();
   }
 
+  /// The chosen grade as the garden has it set up (id and invoice type).
+  GardenGrade? get _gardenGrade => _garden == null ? null : ref.read(gardenOptionsProvider(_garden!.id)).value?.grade(_grade);
+
+  /// A different garden has its own grades and prefixes, so those reset.
+  void _setGarden(MasterItem? g) => setState(() {
+        if (g?.id != _garden?.id) {
+          _grade = null;
+          _prefix.clear();
+        }
+        _garden = g;
+      });
+
+  /// Set when the user saves knowingly over an earlier sample of this lot.
+  int? _parentId;
+
   Map<String, Object?> _body({bool duplicate = false}) => {
         ..._x.body(),
         'arrival_date': Fmt.api(_arrival),
         'garden_id': _garden?.id,
         'grade': _grade,
+        'grade_id': _gardenGrade?.id,
         'invoice_prefix': _prefix.text.trim(),
         'inv_no': _inv.text.trim(),
         'packages': int.tryParse(_pkgs.text),
         'weight': Fmt.parse(_nett.text),
         'total_kgs': Fmt.parse(_total.text),
-        'sample_type': _type,
+        'sample_type': _type ?? ref.read(formOptionsProvider).value?.initial('sample_types'),
         'for_company': _forCompany,
         'party_id': _party?.id,
-        'status': _status.api,
+        'status': _status,
         'remarks': _remarks.text.trim(),
-        if (duplicate) 'is_duplicate': true,
+        if (duplicate || _parentId != null) 'is_duplicate': true,
+        'parent_sample_id': _parentId ?? J.integer(_e?.raw['parent_sample_id']),
       };
 
+  /// Warns, like the website, when this garden, grade, prefix and invoice
+  /// were already received. Returns false to stop saving.
+  Future<bool> _checkDuplicates() async {
+    final garden = _garden?.name, inv = _inv.text.trim();
+    if (garden == null || garden.startsWith('#') || inv.isEmpty) return true;
+    final repo = ref.read(samplesRepositoryProvider);
+    final found = (await repo.duplicates(gardenName: garden, grade: _grade, prefix: _prefix.text.trim(), invoiceNo: inv))
+        .where((d) => d.id != _e?.id)
+        .toList();
+    if (found.isEmpty || !mounted) {
+      _parentId = null;
+      return true;
+    }
+    final ok = await confirm(
+      context,
+      title: 'Already received',
+      body: 'This lot matches ${found.length == 1 ? 'an earlier sample' : '${found.length} earlier samples'}:\n${found.take(3).map((d) => d.label).join('\n')}\n\nSave this one as a duplicate?',
+      action: 'Save as duplicate',
+    );
+    _parentId = ok ? found.first.id : null;
+    return ok;
+  }
+
   Future<void> _save() async {
+    if (_e == null && !await _checkDuplicates()) return;
+    if (!mounted) return;
     final repo = ref.read(samplesRepositoryProvider);
     final ok = await submit<bool>(
       () async {
@@ -146,16 +189,16 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
               DateRow(label: 'Arrival date', value: _arrival, onChanged: (d) => setState(() => _arrival = d), error: err('arrival_date'))
             else
               InfoRow('Arrival date', '${Fmt.day(_arrival)} · locked'),
-            MasterPickerRow(label: 'Garden', provider: gardensProvider, searchPath: '/gardens', value: _garden, onChanged: (g) => setState(() => _garden = g), error: err('garden_id')),
+            MasterPickerRow(label: 'Garden', provider: gardensProvider, searchPath: '/gardens', value: _garden, onChanged: _setGarden, error: err('garden_id')),
             GradePickerRow(gardenId: _garden?.id, value: _grade, onChanged: (g) => setState(() => _grade = g), error: err('grade')),
-            Row(
-              children: [
-                SizedBox(
-                  width: 120,
-                  child: FieldInput(label: 'Prefix', hint: 'SMP', controller: _prefix, error: err('invoice_prefix'), textCapitalization: TextCapitalization.characters),
-                ),
-                Expanded(child: FieldInput(label: 'Invoice no', hint: '2048', controller: _inv, error: err('inv_no'))),
-              ],
+            InvoiceNumberRow(
+              gardenId: _garden?.id,
+              invoiceType: _gardenGrade?.invoiceType,
+              prefix: _prefix,
+              number: _inv,
+              onChanged: () => setState(() {}),
+              prefixError: err('invoice_prefix'),
+              numberError: err('inv_no'),
             ),
           ],
         ),
@@ -175,16 +218,11 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
               child: Row(
                 children: [
                   const Expanded(child: Text('Sample type')),
-                  Segmented<String>(
-                    compact: true,
-                    options: const {'original': 'Original', 'standard': 'Standard'},
-                    selected: _type,
-                    onChanged: (v) => setState(() => _type = v),
-                  ),
+                  OptionSegments(compact: true, list: 'sample_types', value: _type, onChanged: (v) => setState(() => _type = v)),
                 ],
               ),
             ),
-            _ForCompanyRow(value: _forCompany, error: err('for_company'), onChanged: (v) => setState(() => _forCompany = v)),
+            OptionRow(label: 'For', list: 'offer_for', value: _forCompany, placeholder: 'Not set', error: err('for_company'), onChanged: (v) => setState(() => _forCompany = v)),
             MasterPickerRow(
               label: 'Party (outgoing)',
               placeholder: 'None',
@@ -193,19 +231,7 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
               onChanged: (b) => setState(() => _party = b),
               error: err('party_id'),
             ),
-            ValueRow(
-              label: 'Status',
-              value: _status.label,
-              onTap: () async {
-                final s = await showPickerSheet<SampleStatus>(
-                  context,
-                  title: 'Status',
-                  selected: _status,
-                  options: [for (final s in SampleStatus.pickable) PickOption(s, s.label)],
-                );
-                if (s != null) setState(() => _status = s);
-              },
-            ),
+            OptionRow(label: 'Status', list: 'sample_statuses', value: _status, error: err('status'), onChanged: (v) => setState(() => _status = v)),
             FieldInput(label: 'Remarks', hint: 'Clean liquor sample', controller: _remarks, maxLines: 3, error: err('remarks')),
           ],
         ),
@@ -214,40 +240,3 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
   }
 }
 
-/// Who the sample is for: one billing company (by code) or all of them.
-class _ForCompanyRow extends ConsumerWidget {
-  const _ForCompanyRow({required this.value, required this.onChanged, this.error});
-  final String? value;
-  final ValueChanged<String?> onChanged;
-  final String? error;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final companies = ref.watch(billingCompaniesProvider).value ?? const [];
-    String? shown = value == 'all' ? 'All companies' : value;
-    for (final c in companies) {
-      if (c.code == value) shown = c.name;
-    }
-    return ValueRow(
-      label: 'For',
-      value: shown,
-      placeholder: 'Not set',
-      error: error,
-      onTap: () async {
-        final list = await ref.read(billingCompaniesProvider.future);
-        if (!context.mounted) return;
-        final picked = await showPickerSheet<String>(
-          context,
-          title: 'Sample is for',
-          selected: value,
-          options: [
-            const PickOption('', 'Not set'),
-            const PickOption('all', 'All companies'),
-            for (final c in list) PickOption(c.code, c.name, subtitle: c.code == c.name ? null : c.code),
-          ],
-        );
-        if (picked != null) onChanged(picked.isEmpty ? null : picked);
-      },
-    );
-  }
-}

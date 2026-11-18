@@ -676,6 +676,23 @@ Routes checked on 2026-10-29/30; responses checked signed in on 2026-10-31. ✅ 
 | 9.2 | GET | `/ex-factory/export` | ✅ | ✅ | ✅ |
 | 9.3 | POST | `/ex-factory` | ✅ | ✅ | 422 only |
 
+### Form options and lookups (used since 18 Nov 2026)
+
+Checked live on staging, 18 Nov 2026. Lookups answer `{success: false, message}` with HTTP 200 when nothing matches; the app treats that as "not found" (`Api.lookup`).
+
+| Method | Path | Query / body | Returns | Used in |
+|---|---|---|---|---|
+| GET | `/form-options` | – | 29 lists of `{value, label, default?, …}` (statuses, FOR, OFR/SAS, currencies, GST types, roles, departments, offices, pickup days, tea categories, transporters, POCs, seller lists…) | Every dropdown, segment and status label (`formOptionsProvider`) |
+| GET | `/gardens/{id}/options` | – | `grades[{id, grade_code, grade_name, invoice_type}]`, `invoice_types[]`, `invoice_prefixes{type: [..]}` | Grade and prefix pickers on samples, offers, bulk bids, contract items; offer invoice type; `grade_id` |
+| GET | `/sales-register/garden-info` | `garden_id` | `garden_name, incharge, category, location, billing_company, type_configs` | Sale form: picking a garden |
+| GET | `/sales-register/lookup-lot` | `mark, invoice_no` | grade, prefix, pkgs, nett, rates, buyer, category, location, transport, dates, `remaining_pkgs`, `existing_splits` | Sale form: Fill from lot |
+| GET | `/ex-factory/lookup-lot` | `mark, invoice_no` | grade, prefix, pkgs, nett, `total_weight`, transport, `taxable_value`, CN | Ex-factory form: Fill from sales register |
+| GET | `/bid-book/search-offer-list` | `garden_name, invoice_number` (both required) | grade, `grade_id`, packages, `net_weight`, price | Bid form: Fill from offer list |
+| GET | `/contracts/gardens-by-seller` | `seller_id` | `{success, gardens: [{id, garden_name, grades[]}]}` | Contract form: garden |
+| GET | `/courier-entries/pending-posting-lists/{buyer}` | – | `{success, lists: [{id, name, list_date, items[]}]}` | Courier form: posting lists |
+| POST | `/samples/check-duplicate-combination` | `garden_name, grade, invoice_prefix, inv_no` (matches on `garden_name`, not `garden_id`) | `{exists, samples[{id, sample_id, arrival_date, seller_name…}]}` | Sample form: duplicate warning |
+| POST | `/samples/check-duplicate` | same | `{duplicate_all, duplicate_gpi, existing_grade?}` | not used |
+
 ## Verified responses (2026-10-31)
 
 Signed in as admin. Only GET requests, plus create requests with an empty body (all returned 422; nothing was created). Not tested: creating samples or batches, auto-batch, allocation with real data, every `PUT` and `DELETE`, logout.

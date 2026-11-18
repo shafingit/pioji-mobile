@@ -38,7 +38,7 @@ void main() {
     final s = p.items.first;
     expect(s.gardenName, isNotNull);
     expect(s.grade, isNotNull);
-    expect(s.status, isNot(SampleStatus.unknown));
+    expect(s.status, isNotNull);
   }, skip: skip);
 
   test('offer lists', () {

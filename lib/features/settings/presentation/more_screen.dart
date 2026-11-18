@@ -27,7 +27,7 @@ class MoreScreen extends ConsumerWidget {
     final auth = ref.watch(authControllerProvider).value;
     final user = auth is Authenticated ? auth.user : null;
     final ex = ref.watch(exFactoryMetricsProvider).value;
-    final mismatches = ex == null ? 0 : (ex[RegisterStatus.priceMismatch] ?? 0) + (ex[RegisterStatus.qtyMismatch] ?? 0);
+    final mismatches = ex == null ? 0 : (ex['price_mismatch'] ?? 0) + (ex['qty_mismatch'] ?? 0);
 
     Widget reg(AppIcons icon, String label, String route, {String? meta}) => AppListRow(
           title: label,

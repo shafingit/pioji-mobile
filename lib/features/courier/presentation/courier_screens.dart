@@ -22,18 +22,18 @@ import '../../../core/widgets/scaffolds.dart';
 import '../../../core/widgets/sheets.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../masters/data/form_options.dart';
 import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/courier_repository.dart';
 import '../../../core/design/app_icons.dart';
 
-const _days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-class CourierListScreen extends StatelessWidget {
+class CourierListScreen extends ConsumerWidget {
   const CourierListScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ModuleListScreen<CourierEntry>(
       title: 'Courier register',
       inTabs: false,
@@ -49,7 +49,7 @@ class CourierListScreen extends StatelessWidget {
       actions: [AddButton(semanticLabel: 'New courier entry', onPressed: () => context.pushNamed(Routes.courierNew))],
       filters: [
         const DateFilter('date', 'Date'),
-        ChoiceFilter('pickup_day', 'Pickup day', {for (final d in _days) d: d}),
+        ChoiceFilter('pickup_day', 'Pickup day', watchFormOptions(ref).map('pickup_days')),
       ],
       itemBuilder: (context, e) => AppListRow(
         title: e.buyerName ?? e.destinationAddress ?? 'Courier entry',
@@ -152,21 +152,26 @@ class _CourierFormScreenState extends ConsumerState<CourierFormScreen> with Form
   }
 
   Future<void> _pickPosting() async {
-    // Only the selected buyer's posting lists (`?buyer_id=`).
+    // Only lists with items still to send to the selected buyer, plus any
+    // this entry already has.
     final buyerId = _toBuyer ? _buyer?.id : null;
     final items = buyerId == null
         ? await ref.read(postingListsProvider.future)
         : await ref.read(buyerPostingListsProvider(buyerId).future);
     if (!mounted) return;
     if (items.isEmpty) {
-      context.toast(buyerId == null ? "Posting lists aren't available yet." : 'No posting lists for this buyer.');
+      context.toast(buyerId == null ? "Posting lists aren't available yet." : 'No pending posting lists for this buyer.');
       return;
     }
     final sel = await showMultiPickerSheet<int>(
       context,
       title: 'Posting lists',
       selected: _postingIds,
-      options: [for (final p in items) PickOption(p.id, p.name)],
+      options: [
+        for (final p in items) PickOption(p.id, p.name, subtitle: p.subtitle),
+        for (final id in _postingIds)
+          if (!items.any((p) => p.id == id)) PickOption(id, 'List #$id', subtitle: 'Already on this entry'),
+      ],
     );
     if (sel != null) setState(() => _postingIds = sel);
   }
@@ -317,20 +322,7 @@ class _CourierFormScreenState extends ConsumerState<CourierFormScreen> with Form
                 _day = Fmt.weekday(d);
               }),
             ),
-            ValueRow(
-              label: 'Pickup day',
-              value: _day,
-              onTap: () async {
-                final d = await showPickerSheet<String>(
-                  context,
-                  title: 'Pickup day',
-                  selected: _day,
-                  searchable: false,
-                  options: [for (final d in _days) PickOption(d, d)],
-                );
-                if (d != null) setState(() => _day = d);
-              },
-            ),
+            OptionRow(label: 'Pickup day', list: 'pickup_days', value: _day, error: err('pickup_day'), onChanged: (d) => setState(() => _day = d)),
             SwitchRow(label: 'Auction (AUC)', value: _auc, onChanged: (v) => setState(() => _auc = v)),
             SwitchRow(label: 'Private (PVT)', value: _pvt, onChanged: (v) => setState(() => _pvt = v)),
             FieldInput(

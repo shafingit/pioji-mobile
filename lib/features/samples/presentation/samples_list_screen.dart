@@ -8,20 +8,19 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/app_list_row.dart';
 import '../../../core/widgets/buttons.dart';
 import '../../../core/widgets/module_list.dart';
-import '../../../core/widgets/status_badge.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/samples_repository.dart';
 import '../domain/sample.dart';
 import '../../../core/design/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../masters/data/masters_repository.dart';
+import '../../masters/data/form_options.dart';
 
 class SamplesListScreen extends ConsumerWidget {
   const SamplesListScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final companies = ref.watch(billingCompaniesProvider).value ?? const [];
+    final options = watchFormOptions(ref);
     return ModuleListScreen<Sample>(
       title: 'Samples',
       listProvider: samplesListProvider,
@@ -36,15 +35,12 @@ class SamplesListScreen extends ConsumerWidget {
         LinkButton(label: 'Batches', onPressed: () => context.pushNamed(Routes.batches)),
         AddButton(semanticLabel: 'New sample', onPressed: () => context.pushNamed(Routes.sampleNew)),
       ],
-      segments: SegmentConfig(param: 'status', options: {
-        '': 'All',
-        for (final s in SampleStatus.pickable) s.api: s.label,
-      }),
+      segments: SegmentConfig(param: 'status', options: options.map('sample_statuses', all: 'All')),
       filters: [
         const DateFilter('arrival_date', 'Arrival'),
         const PickerFilter('garden_id', 'Mark', pickMark),
-        ChoiceFilter('for_company', 'For', {'all': 'All companies', for (final c in companies) c.code: c.name}),
-        const ChoiceFilter('sample_type', 'Type', {'original': 'Original', 'standard': 'Standard'}),
+        ChoiceFilter('for_company', 'For', options.map('offer_for')),
+        ChoiceFilter('sample_type', 'Type', options.map('sample_types')),
         const ChoiceFilter('evaluation_status', 'Tasting', {'completed': 'Tasted'}),
         const ChoiceFilter('parked', 'Parked', {'1': 'Parked only'}),
       ],
@@ -83,7 +79,7 @@ class SampleRow extends StatelessWidget {
         children: [
           Text(Fmt.kg(s.totalKgs), style: AppText.callout.copyWith(fontFeatures: const [FontFeature.tabularFigures()], color: context.colors.textPrimary)),
           const SizedBox(height: 4),
-          StatusBadge(s.statusLabel, tone: s.status.tone),
+          OptionBadge(list: 'sample_statuses', value: s.status),
         ],
       ),
     );

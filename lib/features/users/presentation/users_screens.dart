@@ -16,13 +16,19 @@ import '../../../core/widgets/module_list.dart';
 import '../../../core/widgets/scaffolds.dart';
 import '../../../core/widgets/sheets.dart';
 import '../../../core/widgets/states.dart';
-import '../../../core/widgets/status_badge.dart';
+import '../../../core/utils/json.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/user.dart';
+import '../../masters/data/form_options.dart';
 import '../../masters/data/masters_repository.dart';
 import '../data/users_repository.dart';
 
-String _roleName(User u, List<Role> roles) {
+/// The role's label from the website's role list (`user_roles`), else
+/// from `GET /roles`, else what the API sent.
+String _roleName(User u, List<Role> roles, FormOptions options) {
+  for (final c in options['user_roles']) {
+    if (c.value == u.role) return c.label;
+  }
   for (final r in roles) {
     if (r.slug == u.role) return r.name;
   }
@@ -36,6 +42,7 @@ class UsersListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final roles = ref.watch(rolesProvider).value ?? const <Role>[];
+    final options = watchFormOptions(ref);
     final canCreate = ref.watch(currentUserProvider)?.can('users.create') ?? true;
     return ModuleListScreen<User>(
       title: 'Users',
@@ -49,14 +56,14 @@ class UsersListScreen extends ConsumerWidget {
       newLabel: canCreate ? 'Add user' : null,
       onNew: canCreate ? () => context.pushNamed(Routes.userNew) : null,
       actions: [if (canCreate) AddButton(semanticLabel: 'Add user', onPressed: () => context.pushNamed(Routes.userNew))],
-      segments: const SegmentConfig(param: 'status', options: {'': 'All', 'active': 'Active', 'inactive': 'Inactive'}),
-      filters: [ChoiceFilter('role', 'Role', {for (final r in roles) r.slug: r.name})],
+      segments: SegmentConfig(param: 'status', options: options.map('user_statuses', all: 'All')),
+      filters: [ChoiceFilter('role', 'Role', options.map('user_roles'))],
       itemBuilder: (context, u) => AppListRow(
         leading: IconTile(initial: u.initial, size: 34),
         title: u.name,
-        subtitle: [_roleName(u, roles), if (u.phone != null) u.phone!, u.email].join(' · '),
+        subtitle: [_roleName(u, roles, options), if (u.phone != null) u.phone!, u.email].join(' · '),
         onTap: () => context.pushNamed(Routes.userDetail, pathParameters: {'id': '${u.id}'}, extra: u),
-        trailing: u.status == 'inactive' ? const StatusBadge('Inactive', tone: Tone.neutral) : null,
+        trailing: u.status == 'active' ? null : OptionBadge(list: 'user_statuses', value: u.status),
       ),
     );
   }
@@ -96,12 +103,15 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
     }
   }
 
-  Future<void> _changeRole(User u, List<Role> roles) async {
+  Future<void> _changeRole(User u) async {
+    final options = await ref.read(formOptionsProvider.future);
+    if (!mounted) return;
     final picked = await showPickerSheet<String>(
       context,
       title: 'Role for ${u.name}',
       selected: u.role,
-      options: [for (final r in roles) PickOption(r.slug, r.name, subtitle: r.description)],
+      searchable: false,
+      options: [for (final r in options['user_roles']) PickOption(r.value, r.label)],
     );
     if (picked == null || picked == u.role || !mounted) return;
     await _run(() => ref.read(usersRepositoryProvider).setRole(u.id!, picked), 'Role changed');
@@ -127,7 +137,9 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
     final c = context.colors;
     final me = ref.watch(currentUserProvider);
     final roles = ref.watch(rolesProvider).value ?? const <Role>[];
+    final options = watchFormOptions(ref);
     final buyers = ref.watch(buyersProvider).value ?? const <MasterItem>[];
+    final offices = [for (final id in u.officeIds) options.label('offices', '$id')!];
     final linked = [
       for (final id in u.buyerIds) buyers.where((b) => b.id == id).map((b) => b.name).firstOrNull ?? 'Buyer #$id',
     ];
@@ -144,7 +156,8 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
             InfoRow('Email', u.email),
             InfoRow('Phone', u.phone ?? 'Not set'),
             InfoRow('Department', u.department ?? 'Not set'),
-            InfoRow('Status', u.status == 'inactive' ? 'Inactive' : 'Active', valueColor: u.status == 'inactive' ? c.warning : null),
+            InfoRow('Status', options.label('user_statuses', u.status), valueColor: u.status == 'active' ? null : c.warning),
+            if (offices.isNotEmpty) InfoRow('Offices', offices.join(', ')),
           ],
         ),
         GroupedSection(
@@ -155,9 +168,9 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
               title: 'Role',
               titleStyle: AppText.body,
               minHeight: 48,
-              trailing: Text(_roleName(u, roles), style: AppText.body.copyWith(color: c.textSecondary)),
-              showChevron: canEdit && !isMe && roles.isNotEmpty,
-              onTap: canEdit && !isMe && roles.isNotEmpty && !_busy ? () => _changeRole(u, roles) : null,
+              trailing: Text(_roleName(u, roles, options), style: AppText.body.copyWith(color: c.textSecondary)),
+              showChevron: canEdit && !isMe,
+              onTap: canEdit && !isMe && !_busy ? () => _changeRole(u) : null,
             ),
             InfoRow('Linked buyers', linked.isEmpty ? 'None' : linked.join(', ')),
           ],
@@ -189,14 +202,16 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> with FormSubmit
   late final _name = TextEditingController(text: _e?.name);
   late final _email = TextEditingController(text: _e?.email);
   late final _phone = TextEditingController(text: _e?.phone);
-  late final _department = TextEditingController(text: _e?.department);
+  late String? _department = _e?.department;
+  late Set<int> _officeIds = {...?_e?.officeIds};
   final _password = TextEditingController();
+  final _confirm = TextEditingController();
   late String? _role = _e?.role;
   late Set<int> _buyerIds = {...?_e?.buyerIds};
 
   @override
   void dispose() {
-    for (final c in [_name, _email, _phone, _department, _password]) {
+    for (final c in [_name, _email, _phone, _password, _confirm]) {
       c.dispose();
     }
     super.dispose();
@@ -208,9 +223,11 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> with FormSubmit
       'name': _name.text.trim(),
       'email': _email.text.trim(),
       'phone': _phone.text.trim(),
-      'department': _department.text.trim(),
+      'department': _department,
       'role': _role,
       'password': _password.text,
+      'password_confirmation': _confirm.text,
+      'office_ids': _officeIds.toList(),
       'buyer_ids': _buyerIds.toList(),
     };
     final ok = await submit<bool>(
@@ -223,6 +240,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> with FormSubmit
         if (!_email.text.contains('@')) 'email': 'Enter an email address.',
         if (_role == null) 'role': 'Choose a role.',
         if (_e == null && _password.text.length < 8) 'password': 'Use at least 8 characters.',
+        if (_password.text.isNotEmpty && _confirm.text != _password.text) 'password_confirmation': "The passwords don't match.",
       },
     );
     if (ok == true && mounted) {
@@ -234,12 +252,8 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> with FormSubmit
 
   @override
   Widget build(BuildContext context) {
-    final roles = ref.watch(rolesProvider).value ?? const <Role>[];
     final buyers = ref.watch(buyersProvider).value ?? const <MasterItem>[];
-    String? roleName;
-    for (final r in roles) {
-      if (r.slug == _role) roleName = r.name;
-    }
+    final options = watchFormOptions(ref);
     return FormScaffold(
       title: _e == null ? 'Add user' : 'Edit user',
       submitLabel: _e == null ? 'Add user' : 'Save changes',
@@ -252,26 +266,28 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> with FormSubmit
             FieldInput(label: 'Name', hint: 'Anita Das', controller: _name, error: err('name'), textCapitalization: TextCapitalization.words),
             FieldInput(label: 'Email', hint: 'name@company.com', controller: _email, error: err('email'), keyboardType: TextInputType.emailAddress),
             FieldInput(label: 'Phone', hint: '98765 43210', controller: _phone, error: err('phone'), keyboardType: TextInputType.phone),
-            FieldInput(label: 'Department', hint: 'Tasting', controller: _department, error: err('department')),
+            OptionRow(label: 'Department', list: 'departments', value: _department, placeholder: 'Not set', error: err('department'), onChanged: (v) => setState(() => _department = v)),
           ],
         ),
         GroupedSection(
           label: 'Access',
           children: [
+            OptionRow(label: 'Role', list: 'user_roles', value: _role, error: err('role'), onChanged: (v) => setState(() => _role = v)),
             ValueRow(
-              label: 'Role',
-              value: roleName ?? _role,
-              error: err('role'),
+              label: 'Offices',
+              value: _officeIds.isEmpty ? null : [for (final id in _officeIds) options.label('offices', '$id')].join(', '),
+              placeholder: 'None',
+              error: err('office_ids'),
               onTap: () async {
-                final list = await ref.read(rolesProvider.future);
+                final all = await ref.read(formOptionsProvider.future);
                 if (!context.mounted) return;
-                final picked = await showPickerSheet<String>(
+                final sel = await showMultiPickerSheet<int>(
                   context,
-                  title: 'Role',
-                  selected: _role,
-                  options: [for (final r in list) PickOption(r.slug, r.name, subtitle: r.description)],
+                  title: 'Offices',
+                  selected: _officeIds,
+                  options: [for (final o in all['offices']) PickOption(int.parse(o.value), o.label, subtitle: J.str(o.extra['city']))],
                 );
-                if (picked != null) setState(() => _role = picked);
+                if (sel != null) setState(() => _officeIds = sel);
               },
             ),
             ValueRow(
@@ -297,6 +313,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> with FormSubmit
           footer: Text(_e == null ? 'At least 8 characters. Share it with the user securely.' : 'Leave empty to keep the current password.'),
           children: [
             FieldInput(label: _e == null ? 'Password' : 'New password', controller: _password, obscureText: true, error: err('password')),
+            FieldInput(label: 'Confirm password', controller: _confirm, obscureText: true, error: err('password_confirmation')),
           ],
         ),
       ],

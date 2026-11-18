@@ -20,19 +20,19 @@ import '../../../core/widgets/module_list.dart';
 import '../../../core/widgets/scaffolds.dart';
 import '../../../core/widgets/sheets.dart';
 import '../../../core/widgets/states.dart';
-import '../../../core/widgets/status_badge.dart';
 import '../../samples/data/samples_repository.dart';
 import '../../samples/domain/sample.dart';
 import '../../samples/presentation/samples_list_screen.dart';
 import '../data/batches_repository.dart';
 import '../../../core/design/app_icons.dart';
 import '../../../core/widgets/controls.dart';
+import '../../masters/data/form_options.dart';
 
-class BatchesListScreen extends StatelessWidget {
+class BatchesListScreen extends ConsumerWidget {
   const BatchesListScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ModuleListScreen<Batch>(
       title: 'Batches',
       inTabs: false,
@@ -48,7 +48,7 @@ class BatchesListScreen extends StatelessWidget {
         LinkButton(label: 'Auto-batch', onPressed: () => context.pushNamed(Routes.batchAuto)),
         AddButton(semanticLabel: 'New batch', onPressed: () => context.pushNamed(Routes.batchNew)),
       ],
-      segments: const SegmentConfig(param: 'status', options: {'': 'All', 'open': 'Open', 'completed': 'Completed'}),
+      segments: SegmentConfig(param: 'status', options: watchFormOptions(ref).map('batch_statuses', all: 'All')),
       filters: const [DateFilter('date', 'Date')],
       itemBuilder: (context, b) => AppListRow(
         title: b.name,
@@ -58,9 +58,9 @@ class BatchesListScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('${b.count} / $kBatchCap', style: AppText.callout.copyWith(color: context.colors.textSecondary)),
+            Text('${b.count} / ${b.cap}', style: AppText.callout.copyWith(color: context.colors.textSecondary)),
             const SizedBox(height: 4),
-            StatusBadge(b.open ? 'Open' : 'Completed', tone: b.open ? Tone.accent : Tone.neutral),
+            OptionBadge(list: 'batch_statuses', value: b.status),
           ],
         ),
       ),
@@ -79,7 +79,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> with FormSubm
   final _name = TextEditingController();
   final _notes = TextEditingController();
   DateTime _date = DateTime.now();
-  bool _open = true;
+  String? _status;
   Set<int> _ids = {};
   List<Sample> _picked = const [];
 
@@ -121,7 +121,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> with FormSubm
       await ref.read(batchesRepositoryProvider).create(
             name: _name.text.trim(),
             date: _date,
-            open: _open,
+            status: _status ?? ref.read(formOptionsProvider).value?.initial('batch_statuses'),
             notes: _notes.text.trim(),
             sampleIds: _ids.toList(),
           );
@@ -159,7 +159,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> with FormSubm
                 _picked = const [];
               }),
             ),
-            SwitchRow(label: 'Open', value: _open, onChanged: (v) => setState(() => _open = v)),
+            OptionRow(label: 'Status', list: 'batch_statuses', value: _status ?? watchFormOptions(ref).initial('batch_statuses'), error: err('status'), onChanged: (v) => setState(() => _status = v)),
             FieldInput(label: 'Notes', hint: 'Testing premium BOP lots', controller: _notes, maxLines: 3),
           ],
         ),
@@ -252,12 +252,12 @@ class _AutoBatchScreenState extends ConsumerState<AutoBatchScreen> with FormSubm
   }
 }
 
-class BatchDetailScreen extends StatelessWidget {
+class BatchDetailScreen extends ConsumerWidget {
   const BatchDetailScreen({super.key, required this.batch});
   final Batch? batch;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final b = batch;
     if (b == null) return const MissingItemScreen(what: 'batch');
     return DetailScaffold(
@@ -269,8 +269,8 @@ class BatchDetailScreen extends StatelessWidget {
         GroupedSection(
           children: [
             InfoRow('Date', Fmt.day(b.date)),
-            InfoRow('Status', b.open ? 'Open' : 'Completed'),
-            InfoRow('Samples', '${b.count} / $kBatchCap'),
+            InfoRow('Status', watchFormOptions(ref).label('batch_statuses', b.status)),
+            InfoRow('Samples', '${b.count} / ${b.cap}'),
             if (b.notes != null) InfoBlock('Notes', b.notes!),
           ],
         ),
@@ -305,7 +305,7 @@ class BatchEditScreen extends ConsumerStatefulWidget {
 }
 
 class _BatchEditScreenState extends ConsumerState<BatchEditScreen> with FormSubmit {
-  late bool _open = widget.batch?.open ?? true;
+  late String? _status = widget.batch?.status;
   late final _notes = TextEditingController(text: widget.batch?.notes);
 
   @override
@@ -318,7 +318,7 @@ class _BatchEditScreenState extends ConsumerState<BatchEditScreen> with FormSubm
     final b = widget.batch!;
     final ok = await submit<bool>(() async {
       await ref.read(batchesRepositoryProvider).update(b.id, {
-        'status': _open ? 'open' : 'completed',
+        'status': _status,
         'remarks': _notes.text.trim(),
       });
       return true;
@@ -344,9 +344,8 @@ class _BatchEditScreenState extends ConsumerState<BatchEditScreen> with FormSubm
         if (banner != null) FormBanner(banner!),
         GroupedSection(
           label: b.name,
-          footer: const Text('Turn off Open to mark the batch completed.'),
           children: [
-            SwitchRow(label: 'Open', value: _open, onChanged: (v) => setState(() => _open = v)),
+            OptionRow(label: 'Status', list: 'batch_statuses', value: _status, error: err('status'), onChanged: (v) => setState(() => _status = v)),
             FieldInput(label: 'Notes', hint: 'Testing premium BOP lots', controller: _notes, maxLines: 3, error: err('remarks')),
           ],
         ),

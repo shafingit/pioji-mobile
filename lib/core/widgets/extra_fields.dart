@@ -58,6 +58,33 @@ class ExtraFieldsController {
           },
       };
 
+  /// Sets the fields [data] has a value for (a lookup result); returns how
+  /// many changed.
+  int fill(Map<String, dynamic> data) {
+    var n = 0;
+    for (final f in fields) {
+      final v = data[f.key];
+      if (v == null || v.toString().isEmpty) continue;
+      switch (f.kind) {
+        case ExtraKind.date:
+          if (J.date(v) case final d?) {
+            dates[f.key] = d;
+            n++;
+          }
+        case ExtraKind.flag:
+          flags[f.key] = J.boolOr(v, false);
+          n++;
+        case ExtraKind.integer || ExtraKind.number || ExtraKind.money:
+          text[f.key]!.text = Fmt.editable(J.dbl(v));
+          n++;
+        case ExtraKind.text:
+          text[f.key]!.text = J.str(v) ?? '';
+          n++;
+      }
+    }
+    return n;
+  }
+
   void dispose() {
     for (final c in text.values) {
       c.dispose();

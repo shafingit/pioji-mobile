@@ -19,6 +19,7 @@ import '../../../core/widgets/scaffolds.dart';
 import '../../../core/widgets/sheets.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/widgets/weight_fields.dart';
+import '../../masters/data/form_options.dart';
 import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/offer_lists_repository.dart';
@@ -50,8 +51,9 @@ class OfferListsScreen extends ConsumerWidget {
       filters: [
         const DateFilter('date_from', 'From'),
         const DateFilter('date_to', 'To'),
-        ChoiceFilter('grade', 'Grade', {for (final g in kTeaGrades) g: g}),
-        const ChoiceFilter('type', 'Type', {'Tea': 'Tea'}),
+        ChoiceFilter('grade', 'Grade', {for (final g in ref.watch(gradesProvider).value ?? const <String>[]) g: g}),
+        ChoiceFilter('type', 'Type', {for (final t in ref.watch(invoiceTypesProvider).value ?? const []) t.value: t.label}),
+        ChoiceFilter('for', 'For', watchFormOptions(ref).map('offer_for')),
         const PickerFilter('garden_id', 'Mark', pickMark),
       ],
       sortField: 'date',
@@ -89,6 +91,8 @@ class OfferListsScreen extends ConsumerWidget {
 const kOfferExtraFields = <ExtraField>[
   ExtraField('year', 'Year', ExtraKind.integer, hint: '2026'),
   ExtraField('center', 'Center', ExtraKind.text, hint: 'Guwahati'),
+  ExtraField('awr_no', 'AWR no', ExtraKind.text, hint: 'AWR-1045'),
+  ExtraField('list_date', 'List date', ExtraKind.date),
 ];
 
 class OfferFormScreen extends ConsumerStatefulWidget {
@@ -104,6 +108,10 @@ class OfferFormScreen extends ConsumerStatefulWidget {
 class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubmit {
   late final _x = ExtraFieldsController(kOfferExtraFields, widget.editing?.raw ?? const {});
   late String? _invoiceType = J.str(widget.editing?.raw['type']);
+  late String? _for = J.str(widget.editing?.raw['for']);
+  late String? _ofrSas = J.str(widget.editing?.raw['ofr_sas']);
+  late String? _currency = J.str(widget.editing?.raw['currency']);
+  late String? _courier = J.str(widget.editing?.raw['courier_name']);
   late final OfferList? _e = widget.editing;
   late DateTime _date = _e?.date ?? DateTime.now();
   late DateTime? _packing = _e?.packingDate;
@@ -130,11 +138,29 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
     super.dispose();
   }
 
+  GardenGrade? get _gardenGrade => _garden == null ? null : ref.read(gardenOptionsProvider(_garden!.id)).value?.grade(_grade);
+
+  /// A different garden has its own grades and prefixes, so those reset.
+  void _setGarden(MasterItem? g) => setState(() {
+        if (g?.id != _garden?.id) {
+          _grade = null;
+          _prefix.clear();
+        }
+        _garden = g;
+      });
+
+  /// The garden's grade sets the invoice type, as on the website.
+  void _setGrade(String g) => setState(() {
+        _grade = g;
+        _invoiceType = _gardenGrade?.invoiceType ?? _invoiceType;
+      });
+
   Map<String, Object?> _body([String? duplicateAction]) => {
         'date': Fmt.api(_date),
         'garden_id': _garden?.id,
         'garden_name': _garden?.name.startsWith('#') == true ? null : _garden?.name,
         'grade': _grade,
+        'grade_id': _gardenGrade?.id,
         'inv_prefix': _prefix.text.trim(),
         'inv_no': _inv.text.trim(),
         'pkgs': Fmt.parse(_pkgs.text),
@@ -146,7 +172,10 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
         // From GET /invoice-types; left out when not chosen.
         'type': _invoiceType,
         'price': Fmt.parse(_price.text),
-        'currency': 'INR',
+        'currency': _currency ?? ref.read(formOptionsProvider).value?.initial('currencies'),
+        'for': _for,
+        'ofr_sas': _ofrSas,
+        'courier_name': _courier,
         'prompt_days': int.tryParse(_prompt.text),
         for (final (i, p) in _parties.whereType<String>().where((p) => p.trim().isNotEmpty).indexed) 'party_${i + 1}': p.trim(),
         if (_e == null) 'duplicate_action': duplicateAction,
@@ -206,12 +235,19 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
           label: 'Lot',
           children: [
             DateRow(label: 'Date', value: _date, onChanged: (d) => setState(() => _date = d), error: err('date')),
-            MasterPickerRow(label: 'Garden', provider: gardensProvider, searchPath: '/gardens', value: _garden, onChanged: (g) => setState(() => _garden = g), error: err('garden_id')),
-            GradePickerRow(gardenId: _garden?.id, value: _grade, onChanged: (g) => setState(() => _grade = g), error: err('grade')),
-            Row(children: [
-              SizedBox(width: 120, child: FieldInput(label: 'Prefix', hint: 'IVP', controller: _prefix, textCapitalization: TextCapitalization.characters, error: err('inv_prefix'))),
-              Expanded(child: FieldInput(label: 'Invoice no', hint: '1045', controller: _inv, error: err('inv_no'))),
-            ]),
+            MasterPickerRow(label: 'Garden', provider: gardensProvider, searchPath: '/gardens', value: _garden, onChanged: _setGarden, error: err('garden_id')),
+            GradePickerRow(gardenId: _garden?.id, value: _grade, onChanged: _setGrade, error: err('grade')),
+            InvoiceNumberRow(
+              gardenId: _garden?.id,
+              invoiceType: _invoiceType,
+              prefix: _prefix,
+              number: _inv,
+              onChanged: () => setState(() {}),
+              prefixHint: 'IVP',
+              numberHint: '1045',
+              prefixError: err('inv_prefix'),
+              numberError: err('inv_no'),
+            ),
           ],
         ),
         WeightFields(pkgs: _pkgs, nett: _nett, total: _total, errors: errors),
@@ -225,7 +261,16 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
           label: 'Price',
           children: [
             FieldInput(label: 'Price per kg', hint: '280.00', controller: _price, suffix: '₹', error: err('price'), keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: decimalOnly),
+            OptionRow(label: 'Currency', list: 'currencies', value: _currency ?? watchFormOptions(ref).initial('currencies'), error: err('currency'), onChanged: (v) => setState(() => _currency = v)),
             FieldInput(label: 'Prompt days', hint: '14', controller: _prompt, keyboardType: TextInputType.number, inputFormatters: digitsOnly),
+          ],
+        ),
+        GroupedSection(
+          label: 'Offer',
+          children: [
+            OptionRow(label: 'For', list: 'offer_for', value: _for, placeholder: 'Not set', error: err('for'), onChanged: (v) => setState(() => _for = v)),
+            OptionRow(label: 'OFR / SAS', list: 'offer_ofr_sas', value: _ofrSas, placeholder: 'Not set', error: err('ofr_sas'), onChanged: (v) => setState(() => _ofrSas = v)),
+            OptionRow(label: 'Courier', list: 'courier_companies', value: _courier, placeholder: 'Not set', error: err('courier_name'), onChanged: (v) => setState(() => _courier = v)),
           ],
         ),
         ExtraFieldsSection(controller: _x, errors: errors, onChanged: () => setState(() {})),
@@ -264,12 +309,13 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
   }
 }
 
-class OfferDetailScreen extends StatelessWidget {
+class OfferDetailScreen extends ConsumerWidget {
   const OfferDetailScreen({super.key, required this.offer});
   final OfferList? offer;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final options = watchFormOptions(ref);
     final o = offer;
     if (o == null) return const MissingItemScreen(what: 'offer');
     return DetailScaffold(
@@ -302,6 +348,10 @@ class OfferDetailScreen extends StatelessWidget {
           children: [
             InfoRow('Price per kg', Fmt.money(o.price)),
             InfoRow('Prompt days', o.promptDays?.toString()),
+            InfoRow('Currency', J.str(o.raw['currency'])),
+            InfoRow('For', options.label('offer_for', J.str(o.raw['for']))),
+            InfoRow('OFR / SAS', options.label('offer_ofr_sas', J.str(o.raw['ofr_sas']))),
+            InfoRow('Courier', options.label('courier_companies', J.str(o.raw['courier_name']))),
           ],
         ),
         if (o.parties.isNotEmpty)

@@ -12,6 +12,7 @@ class User {
     this.department,
     this.status,
     this.buyerIds = const [],
+    this.officeIds = const [],
     this.permissions,
   });
 
@@ -26,6 +27,7 @@ class User {
   final String? department;
   final String? status;
   final List<int> buyerIds;
+  final List<int> officeIds;
 
   /// Null when unknown (e.g. offline with a cached user): then [can] allows
   /// everything and the server decides.
@@ -45,6 +47,7 @@ class User {
         department: J.str(j['department']),
         status: J.str(j['status']),
         buyerIds: J.ints(j['buyer_ids']),
+        officeIds: J.ints(j['office_ids']),
         permissions: j['permissions'] is List ? {for (final p in j['permissions'] as List) p.toString()} : null,
       );
 

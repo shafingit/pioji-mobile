@@ -10,6 +10,7 @@ import '../../../core/design/typography.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../../core/router/routes.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/json.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_list_row.dart';
 import '../../../core/widgets/buttons.dart';
@@ -22,6 +23,7 @@ import '../../../core/widgets/one_line_text.dart';
 import '../../../core/widgets/scaffolds.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../masters/data/form_options.dart';
 import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/ex_factory_repository.dart';
@@ -55,6 +57,7 @@ class _ExFactoryListScreenState extends ConsumerState<ExFactoryListScreen> {
   @override
   Widget build(BuildContext context) {
     final metrics = ref.watch(exFactoryMetricsProvider).value;
+    final statuses = watchFormOptions(ref)['ex_factory_register_statuses'];
     final current = ref.watch(exFactoryQueryProvider).params['register_status'];
     final c = context.colors;
     return ModuleListScreen<ExFactoryBill>(
@@ -88,19 +91,19 @@ class _ExFactoryListScreenState extends ConsumerState<ExFactoryListScreen> {
             mainAxisExtent: 64,
           ),
           children: [
-            for (final s in RegisterStatus.values)
+            for (final s in statuses)
               AppCard(
-                onTap: () => ref.read(exFactoryQueryProvider.notifier).setParam('register_status', current == s.api ? null : s.api),
+                onTap: () => ref.read(exFactoryQueryProvider.notifier).setParam('register_status', current == s.value ? null : s.value),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Container(
-                  color: current == s.api ? c.accentTint : null,
+                  color: current == s.value ? c.accentTint : null,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       OneLineText(s.label, style: AppText.footnote.copyWith(color: c.textTertiary)),
-                      FitText(metrics == null ? '–' : Fmt.number(metrics[s]),
-                          style: AppText.headline.copyWith(color: toneColor(context, s.tone))),
+                      FitText(metrics == null ? '–' : Fmt.number(metrics[s.value]),
+                          style: AppText.headline.copyWith(color: toneColor(context, statusTone(s.value)))),
                     ],
                   ),
                 ),
@@ -119,7 +122,7 @@ class _ExFactoryListScreenState extends ConsumerState<ExFactoryListScreen> {
           children: [
             Text(Fmt.money(b.total), style: AppText.callout.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            if (b.status != null) StatusBadge(b.status!.label, tone: b.status!.tone),
+            OptionBadge(list: 'ex_factory_register_statuses', value: b.status),
           ],
         ),
       ),
@@ -130,6 +133,7 @@ class _ExFactoryListScreenState extends ConsumerState<ExFactoryListScreen> {
 
 /// Website form fields the API saves (dropdowns load from their own APIs).
 const kBillExtraFields = <ExtraField>[
+  ExtraField('total_weight', 'Total weight', ExtraKind.number, suffix: 'kg'),
   ExtraField('tcs_194q', 'TCS 194Q', ExtraKind.money),
   ExtraField('tcs_206c', 'TCS 206C', ExtraKind.money),
   ExtraField('tds_194q', 'TDS 194Q', ExtraKind.money),
@@ -165,7 +169,8 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
   late DateTime _date = _e?.billDate ?? DateTime.now();
   late DateTime? _cnDate = _e?.cnDate;
   late MasterItem? _supplier = _e?.supplierId == null ? null : MasterItem(_e!.supplierId!, _e.supplierName ?? '#${_e.supplierId}');
-  late bool _igst = _e?.gstType != 'cgst_sgst';
+  late String? _gstType = _e?.gstType;
+  bool get _igst => (_gstType ?? ref.read(formOptionsProvider).value?.initial('gst_types')) == 'igst';
   late bool _totalEdited = _e != null;
   late final _mark = TextEditingController(text: _e?.mark);
   late final _prefix = TextEditingController(text: _e?.invoicePrefix);
@@ -180,6 +185,35 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
   late final _cn = TextEditingController(text: _e?.cnNumber);
   late final _transport = TextEditingController(text: _e?.transport);
   late final _credit = TextEditingController(text: _e?.creditDays?.toString());
+
+  bool _looking = false;
+
+  /// Fills the bill from the lot's sales register entry, by mark and
+  /// invoice (`GET /ex-factory/lookup-lot`), like the website.
+  Future<void> _lookupLot() async {
+    if (_looking) return;
+    setState(() => _looking = true);
+    final lot = await ref.read(exFactoryRepositoryProvider).lookupLot(_mark.text.trim(), _inv.text.trim());
+    if (!mounted) return;
+    setState(() => _looking = false);
+    if (lot == null) {
+      context.toast('No lot found for this mark and invoice.');
+      return;
+    }
+    setState(() {
+      if (J.str(lot['invoice_prefix']) case final v?) _prefix.text = v;
+      if (J.integer(lot['pkgs']) case final v? when v > 0) _pkgs.text = '$v';
+      if (J.dbl(lot['nett']) case final v? when v > 0) _nett.text = Fmt.editable(v);
+      if (J.dbl(lot['taxable_value']) case final v? when v > 0) _taxable.text = Fmt.editable(v);
+      if (J.str(lot['transport']) case final v?) _transport.text = v;
+      if (J.str(lot['cn_number']) case final v?) _cn.text = v;
+      if (J.date(lot['cn_date']) case final v?) _cnDate = v;
+      _x.fill(lot);
+    });
+    _suggestTax();
+    _recalc();
+    context.toast('Filled from ${J.str(lot['source']) ?? 'the lot'}');
+  }
 
   @override
   void dispose() {
@@ -227,7 +261,7 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
         'pkgs': int.tryParse(_pkgs.text),
         'nett': Fmt.parse(_nett.text),
         'taxable_value': Fmt.parse(_taxable.text),
-        'gst_type': _igst ? 'igst' : 'cgst_sgst',
+        'gst_type': _gstType ?? ref.read(formOptionsProvider).value?.initial('gst_types'),
         // The unused type is sent as 0: the server rejects null, and on edit
         // leaving it out would keep the old amount.
         'igst_amount': _igst ? Fmt.parse(_igstAmt.text) : 0,
@@ -264,7 +298,7 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
       return;
     }
     final s = res.bill?.status;
-    context.toast(s == null ? 'Bill saved' : 'Bill saved · ${s.label}');
+    context.toast(s == null ? 'Bill saved' : 'Bill saved · ${ref.read(formOptionsProvider).value?.label('ex_factory_register_statuses', s) ?? s}');
     context.pop();
   }
 
@@ -283,11 +317,16 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
           children: [
             DateRow(label: 'Bill date', value: _date, onChanged: (d) => setState(() => _date = d), error: err('bill_date')),
             MasterPickerRow(label: 'Supplier', provider: sellersProvider, value: _supplier, placeholder: 'Optional', onChanged: (s) => setState(() => _supplier = s)),
-            FieldInput(label: 'Mark', hint: 'Assam Valley Mark', controller: _mark, error: err('mark')),
+            FieldInput(label: 'Mark', hint: 'Assam Valley Mark', controller: _mark, error: err('mark'), onChanged: (_) => setState(() {})),
             Row(children: [
               SizedBox(width: 120, child: FieldInput(label: 'Prefix', hint: 'IVP', controller: _prefix, textCapitalization: TextCapitalization.characters)),
-              Expanded(child: FieldInput(label: 'Invoice no', hint: '9812', controller: _inv, error: err('invoice_no'))),
+              Expanded(child: FieldInput(label: 'Invoice no', hint: '9812', controller: _inv, error: err('invoice_no'), onChanged: (_) => setState(() {}))),
             ]),
+            LookupButton(
+              label: 'Fill from sales register',
+              busy: _looking,
+              onPressed: _mark.text.trim().isEmpty || _inv.text.trim().isEmpty ? null : _lookupLot,
+            ),
           ],
         ),
         GroupedSection(
@@ -304,16 +343,15 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
           footer: Text('Suggested GST is 5% of the taxable value. You can edit it.'),
           children: [
             FieldInput(label: 'Taxable value', hint: '271250.00', suffix: '₹', controller: _taxable, error: err('taxable_value'), onChanged: (_) => _recalc(), keyboardType: dec(), inputFormatters: decimalOnly),
-            Padding(
-              padding: const EdgeInsets.all(AppSpace.sm),
-              child: Segmented<bool>(
-                options: const {true: 'IGST', false: 'CGST + SGST'},
-                selected: _igst,
-                onChanged: (v) {
-                  _igst = v;
-                  _recalc();
-                },
-              ),
+            OptionRow(
+              label: 'GST type',
+              list: 'gst_types',
+              value: _gstType ?? watchFormOptions(ref).initial('gst_types'),
+              error: err('gst_type'),
+              onChanged: (v) {
+                _gstType = v;
+                _recalc();
+              },
             ),
             if (_igst)
               FieldInput(label: 'IGST amount', hint: '13562.50', suffix: '₹', controller: _igstAmt, error: err('igst_amount'), onChanged: (_) => _recalc(), keyboardType: dec(), inputFormatters: decimalOnly,
@@ -368,7 +406,7 @@ class ExFactoryDetailScreen extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(children: [
             Expanded(child: Text(Fmt.money(b.total), style: AppText.metric)),
-            if (b.status != null) StatusBadge(b.status!.label, tone: b.status!.tone),
+            OptionBadge(list: 'ex_factory_register_statuses', value: b.status),
           ]),
         ),
         GroupedSection(

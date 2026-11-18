@@ -1,24 +1,4 @@
 import '../../../core/utils/json.dart';
-import '../../../core/widgets/status_badge.dart';
-
-enum SampleStatus {
-  received('received', 'Received', Tone.success),
-  pendingEvaluation('pending_evaluation', 'Pending evaluation', Tone.warning),
-  evaluated('evaluated', 'Evaluated', Tone.accent),
-  assignedToBuyers('assigned_to_buyers', 'Assigned', Tone.accent),
-  approved('approved', 'Approved', Tone.success),
-  unknown('', 'Unknown', Tone.neutral);
-
-  const SampleStatus(this.api, this.label, this.tone);
-  final String api;
-  final String label;
-  final Tone tone;
-
-  static SampleStatus parse(Object? v) =>
-      values.firstWhere((s) => s.api == v?.toString(), orElse: () => unknown);
-
-  static const pickable = [received, pendingEvaluation, evaluated, assignedToBuyers, approved];
-}
 
 class Sample {
   const Sample({
@@ -34,8 +14,7 @@ class Sample {
     this.weight,
     this.totalKgs,
     this.sampleType,
-    this.status = SampleStatus.unknown,
-    this.statusRaw,
+    this.status,
     this.remarks,
     this.batchRef,
     this.forCompany,
@@ -75,8 +54,8 @@ class Sample {
   final double? weight;
   final double? totalKgs;
   final String? sampleType;
-  final SampleStatus status;
-  final String? statusRaw;
+  /// API status value; its label is in `form-options` → `sample_statuses`.
+  final String? status;
   final String? remarks;
   /// Batch reference, e.g. `BATCH20260904001-01` (the API sends text, not an id).
   final String? batchRef;
@@ -102,7 +81,6 @@ class Sample {
   bool get isTasted => evaluationStatus == 'completed' || overallScore != null;
 
   String get title => [gardenName ?? 'Garden #${gardenId ?? '–'}', ?grade].join(' · ');
-  String get statusLabel => status == SampleStatus.unknown ? (statusRaw ?? 'Unknown') : status.label;
 
   factory Sample.fromJson(Map<String, dynamic> j) => Sample(
         raw: j,
@@ -117,8 +95,7 @@ class Sample {
         weight: J.dbl(j['nett'] ?? j['weight_per_sample'] ?? j['weight']),
         totalKgs: J.dbl(j['total_kgs']),
         sampleType: J.str(j['sample_type']),
-        status: SampleStatus.parse(j['status']),
-        statusRaw: J.str(j['status']),
+        status: J.str(j['status']),
         remarks: J.str(j['remarks']),
         batchRef: J.str(j['batch_id']),
         forCompany: J.str(j['for_company']),

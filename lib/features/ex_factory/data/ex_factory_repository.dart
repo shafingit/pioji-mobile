@@ -13,21 +13,7 @@ import '../../../core/network/error_mapper.dart';
 import '../../../core/network/paginated.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/json.dart';
-import '../../../core/widgets/status_badge.dart';
-
-enum RegisterStatus {
-  matched('matched', 'Matched', Tone.success),
-  priceMismatch('price_mismatch', 'Price mismatch', Tone.warning),
-  qtyMismatch('qty_mismatch', 'Qty mismatch', Tone.warning),
-  unregistered('unregistered', 'Unregistered', Tone.danger);
-
-  const RegisterStatus(this.api, this.label, this.tone);
-  final String api;
-  final String label;
-  final Tone tone;
-
-  static RegisterStatus? parse(Object? v) => values.where((s) => s.api == v?.toString()).firstOrNull;
-}
+import '../../masters/data/form_options.dart';
 
 class ExFactoryBill {
   const ExFactoryBill({
@@ -78,7 +64,8 @@ class ExFactoryBill {
   final DateTime? cnDate;
   final String? transport;
   final int? creditDays;
-  final RegisterStatus? status;
+  /// `register_status`; labels are in `form-options` → `ex_factory_register_statuses`.
+  final String? status;
 
   factory ExFactoryBill.fromJson(Map<String, dynamic> j) => ExFactoryBill(
         raw: j,
@@ -102,13 +89,18 @@ class ExFactoryBill {
         cnDate: J.date(j['cn_date']),
         transport: J.str(j['transport']),
         creditDays: J.integer(j['credit_days']),
-        status: RegisterStatus.parse(j['register_status']),
+        status: J.str(j['register_status']),
       );
 }
 
 class ExFactoryRepository {
   const ExFactoryRepository(this._api);
   final Api _api;
+
+  /// A lot's details from the sales register, by mark and invoice
+  /// (`GET /ex-factory/lookup-lot`).
+  Future<Map<String, dynamic>?> lookupLot(String mark, String invoiceNo) =>
+      _api.lookup('/ex-factory/lookup-lot', query: {'mark': mark, 'invoice_no': invoiceNo});
 
   Future<ExFactoryBill> get(int id) async => ExFactoryBill.fromJson(await _api.one('/ex-factory/$id'));
 
@@ -118,10 +110,11 @@ class ExFactoryRepository {
       _api.page('/ex-factory', ExFactoryBill.fromJson, query: q.toQuery(), page: page);
 
   /// Status counts for the summary strip, when the API includes them.
-  Future<Map<RegisterStatus, int>> metrics() async {
-    final counts = <RegisterStatus, int>{};
-    for (final s in RegisterStatus.values) {
-      final p = await _api.page('/ex-factory', ExFactoryBill.fromJson, query: {'register_status': s.api}, perPage: 1);
+  /// Bills per register status, for each status value given.
+  Future<Map<String, int>> metrics(Iterable<String> statuses) async {
+    final counts = <String, int>{};
+    for (final s in statuses) {
+      final p = await _api.page('/ex-factory', ExFactoryBill.fromJson, query: {'register_status': s}, perPage: 1);
       counts[s] = p.total;
     }
     return counts;
@@ -155,4 +148,7 @@ final exFactoryListProvider = pagedProvider<ExFactoryBill>(
   exFactoryQueryProvider,
   (ref, q, page) => ref.read(exFactoryRepositoryProvider).list(q, page: page),
 );
-final exFactoryMetricsProvider = FutureProvider((ref) => ref.read(exFactoryRepositoryProvider).metrics());
+final exFactoryMetricsProvider = FutureProvider((ref) async {
+  final options = await ref.watch(formOptionsProvider.future);
+  return ref.read(exFactoryRepositoryProvider).metrics(options['ex_factory_register_statuses'].map((c) => c.value));
+});

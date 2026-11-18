@@ -6,21 +6,6 @@ import '../../../core/network/api.dart';
 import '../../../core/network/dio_provider.dart';
 import '../../../core/network/paginated.dart';
 import '../../../core/utils/json.dart';
-import '../../../core/widgets/status_badge.dart';
-
-enum BidStatus {
-  open('open', 'Open', Tone.accent),
-  parked('parked', 'Parked', Tone.warning),
-  held('OK-BID HOLD', 'Held', Tone.warning),
-  closed('closed', 'Closed', Tone.neutral);
-
-  const BidStatus(this.api, this.label, this.tone);
-  final String api;
-  final String label;
-  final Tone tone;
-
-  static BidStatus parse(Object? v) => values.firstWhere((s) => s.api == v?.toString(), orElse: () => open);
-}
 
 class Bid {
   const Bid({
@@ -35,7 +20,7 @@ class Bid {
     this.maxBid,
     this.negotiated,
     this.pencil,
-    this.status = BidStatus.open,
+    this.status,
     this.buyerId,
     this.buyerName,
     this.negotiatorId,
@@ -56,7 +41,8 @@ class Bid {
   final double? maxBid;
   final double? negotiated;
   final double? pencil;
-  final BidStatus status;
+  /// API status value; labels are in `form-options` → `bid_statuses`.
+  final String? status;
   final int? buyerId;
   final String? buyerName;
   final int? negotiatorId;
@@ -75,7 +61,7 @@ class Bid {
         maxBid: J.dbl(j['max_bid']),
         negotiated: J.dbl(j['negotiated_price']),
         pencil: J.dbl(j['pencil_price']),
-        status: BidStatus.parse(j['status']),
+        status: J.str(j['status']),
         buyerId: J.integer(j['buyer_id']),
         buyerName: J.nested(j, 'buyer_name', 'buyer', 'buyer_name'),
         negotiatorId: J.integer(j['negotiator_id']),
@@ -87,6 +73,11 @@ class Bid {
 class BidBookRepository {
   const BidBookRepository(this._api);
   final Api _api;
+
+  /// The offer-list lot for a garden and invoice: grade, packages, net
+  /// weight, price (`GET /bid-book/search-offer-list`).
+  Future<Map<String, dynamic>?> searchOfferList(String gardenName, String invoiceNumber) =>
+      _api.lookup('/bid-book/search-offer-list', query: {'garden_name': gardenName, 'invoice_number': invoiceNumber});
 
   Future<Bid> get(int id) async => Bid.fromJson(await _api.one('/bid-book/$id'));
 

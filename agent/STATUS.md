@@ -1,4 +1,4 @@
-# Status — 17 Nov 2026
+# Status — 18 Nov 2026
 
 ## Built
 
@@ -7,6 +7,7 @@ All screens in the spec exist and compile with zero analyzer issues:
 - Splash, 3-page onboarding, sign in (with session-expired state), Terms and Privacy pages
 - Tab shell with the gradient bottom bar (tablet: side rail)
 - 17 Nov 2026: solid tab bar with a top border; server sorting and `garden_id` mark filter on lists; posting lists filtered by the courier buyer; grade picker limited to the garden's grades; arrival date locked without `samples.edit_arrival_date`; sample For (billing company) and outgoing party with filters; tasting (record scores 0–10, park/unpark, tasted/parked filters, tasting report under More); bulk bids (add many lots of one mark, set asking/max on many); Users (list, detail, add, edit, role, activate/deactivate) for `users.view`; role, phone and department on More; New offer / Allocate hidden without their permissions
+- 18 Nov 2026: every dropdown, status, segment and status label comes from `GET /form-options` (no status enums or option lists left in the app; only the status tint is chosen in the app, in `statusTone`). Garden-driven grades, invoice prefixes, grade id and invoice type from `GET /gardens/{id}/options`. "Fill from lot" on sales (`lookup-lot`) and ex-factory (`lookup-lot`), "Fill from offer list" on bids (`search-offer-list`), garden info on sales (incharge, category, location), seller-filtered gardens on contracts, pending posting lists per buyer on courier, duplicate-sample warning (`check-duplicate-combination`, saves `parent_sample_id`). New form fields: offer FOR / OFR-SAS / currency / courier / AWR no / list date, sale garden / category / incharge, contract garden and item currency, ex-factory total weight, user department / offices / password confirmation
 - Own look on both platforms (12 Nov 2026): no Cupertino, custom SVG icons, Inter, compact 56 px top bar, custom dialog / sheet / calendar / switch / spinner / pull-to-refresh
 - Home: samples today (with the total), unbatched, open bids, ex-factory mismatches, an all-time sales card (value, kg, pending approval), quick actions, a checklist driven by real counts (now including sales waiting for approval), recent samples. Most counts come from one `GET /dashboard/summary` call
 - Samples: list (status segments, arrival and mark filters, grouped by arrival date → mark → invoice, latest / earliest first), new and edit sample (2-of-3 weights, duplicate "save anyway"), detail with delete
@@ -21,7 +22,7 @@ All screens in the spec exist and compile with zero analyzer issues:
 - Buyer and seller pickers can add a new buyer or seller by name (`POST /buyers`, `POST /sellers`)
 - Write paths tested 5 Nov 2026 and re-tested 7 and 9 Nov 2026 (create, edit, delete for every module; details in `docs/API_DOCS.md` → Write tests)
 - Every detail screen loads by ID (`GET /{module}/{id}`): it shows the list copy at once, refreshes from the API, and works from a deep link
-- Grade pickers load `GET /grades`, falling back to a built-in list
+- Grade pickers load the garden's grades, else `GET /grades`
 - More and Settings (theme, version, legal), sign out
 - App ID `com.gitcs.pioji` on iOS and Android; launcher icons (two-leaf mark, light/dark, Android adaptive + monochrome) and native splash
 
@@ -30,6 +31,8 @@ All screens in the spec exist and compile with zero analyzer issues:
 On 31 Oct 2026, signed in as admin: every list, lookup and detail response was fetched and run through the app's parsers (`test/api_parsing_test.dart`, which needs `API_FIXTURES` pointing at saved responses). All 11 parser tests pass.
 
 ## Not verified
+
+- 18 Nov 2026 form-options and lookup changes: analyzer clean, unit tests pass, every lookup response checked live on staging; not yet run in the simulator.
 
 - The Android APK is built and signed on GitHub Actions, but has not been run on a device or emulator.
 - On the simulator: sample create / edit / delete, batch edit + delete, and contract edit + delete. The other forms were tested against the API with the app's exact request bodies.
@@ -67,10 +70,10 @@ Re-checked against the staging server on 9 Nov 2026, signed in as admin, with ma
 The 10 client-feedback requests (12 Nov 2026) were all built by 17 Nov 2026 and are used by the app: sorting (`sort_by` / `sort_dir`), `garden_id` filter, posting lists by buyer, grades per garden, the arrival-date permission, users and roles, sample `for_company` / `sample_type` / `party_id` (+ `GET /billing-companies`), bulk bids, tasting (save, park/unpark, filters, `GET /reports/tasting`) and the new permissions. Still open:
 
 1. `POST /bid-book/bulk` fails with a raw SQL error ("Column 'max_bid' cannot be null") when a lot has no max bid. Max bid should be optional, and SQL must never reach the response.
-2. Tasting score scale: the API accepts 0–10, but tastings saved on the website hold 68, 70 … (0–100). Pick one scale; until then old tastings can't be edited from the app.
+2. Tasting scale (answered 18 Nov): batch testing is 0–100 (the website flow); `POST /samples/{id}/tasting` stays a quick 0–10 score. The route that saves batch testing scores is still missing.
 3. Sample 28 (SMP2026080002) was marked tasted by an accidental empty `POST /samples/28/tasting` on 17 Nov 2026 (`evaluated_at` / `evaluated_by` changed; scores were already there). Restore its previous evaluation fields from the server logs.
 4. Not testable as super admin: that `POST`/`PUT /samples` refuses a non-today arrival date without `samples.edit_arrival_date`.
-5. `GET /samples/{id}` returns `party: null` even when `party_id` is set; the app looks the name up in the buyer list.
+5. Fixed 18 Nov: `party` comes back as `{id, buyer_name, code}`.
 
 ## Not built yet (from the spec)
 

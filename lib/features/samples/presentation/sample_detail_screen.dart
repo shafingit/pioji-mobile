@@ -17,8 +17,8 @@ import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/detail.dart';
 import '../../../core/widgets/one_line_text.dart';
 import '../../../core/widgets/scaffolds.dart';
-import '../../../core/widgets/status_badge.dart';
 import '../domain/sample.dart';
+import '../../masters/data/form_options.dart';
 import '../../masters/data/masters_repository.dart';
 import 'tasting_screens.dart';
 import '../../../core/widgets/extra_fields.dart';
@@ -81,7 +81,7 @@ class _SampleDetailScreenState extends ConsumerState<SampleDetailScreen> {
               Row(
                 children: [
                   Expanded(child: OneLineText(s.title, style: AppText.headline)),
-                  StatusBadge(s.statusLabel, tone: s.status.tone),
+                  OptionBadge(list: 'sample_statuses', value: s.status),
                 ],
               ),
               const SizedBox(height: 4),

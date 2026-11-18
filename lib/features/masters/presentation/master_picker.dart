@@ -332,7 +332,7 @@ class GradePickerRow extends ConsumerWidget {
   final String? value;
 
   /// When set, only the grades set up for this garden are offered
-  /// (`GET /gardens/{id}/grades`), falling back to every grade if it has none.
+  /// (`GET /gardens/{id}/options`), falling back to every grade if it has none.
   final int? gardenId;
   final ValueChanged<String> onChanged;
   final String? error;
@@ -345,7 +345,7 @@ class GradePickerRow extends ConsumerWidget {
       value: value,
       error: error,
       onTap: () async {
-        final forGarden = gardenId == null ? const <({String code, String? type})>[] : await ref.read(gardenGradesProvider(gardenId!).future);
+        final forGarden = gardenId == null ? const <GardenGrade>[] : (await ref.read(gardenOptionsProvider(gardenId!).future)).grades;
         final grades = forGarden.isNotEmpty ? const <String>[] : await ref.read(gradesProvider.future);
         if (!context.mounted) return;
         final picked = await showPickerSheet<String>(
@@ -353,12 +353,71 @@ class GradePickerRow extends ConsumerWidget {
           title: forGarden.isNotEmpty ? '$label for this garden' : label,
           selected: value,
           options: forGarden.isNotEmpty
-              ? [for (final g in forGarden) PickOption(g.code, g.code, subtitle: g.type)]
+              ? [for (final g in forGarden) PickOption(g.code, g.code, subtitle: [if (g.name != g.code) g.name, ?g.invoiceType].join(' · '))]
               : [for (final g in grades) PickOption(g, g)],
         );
         if (picked != null) onChanged(picked);
       },
     );
+  }
+}
+
+/// Invoice prefix and number. When the garden has prefixes set up
+/// (`GET /gardens/{id}/options`), the prefix is picked from them, for the
+/// grade's invoice type; otherwise it's typed.
+class InvoiceNumberRow extends ConsumerWidget {
+  const InvoiceNumberRow({
+    super.key,
+    required this.gardenId,
+    required this.invoiceType,
+    required this.prefix,
+    required this.number,
+    required this.onChanged,
+    this.prefixError,
+    this.numberError,
+    this.prefixHint = 'SMP',
+    this.numberHint = '2048',
+  });
+
+  final int? gardenId;
+  final String? invoiceType;
+  final TextEditingController prefix;
+  final TextEditingController number;
+  final VoidCallback onChanged;
+  final String? prefixError;
+  final String? numberError;
+  final String prefixHint;
+  final String numberHint;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final options = gardenId == null ? GardenOptions.empty : ref.watch(gardenOptionsProvider(gardenId!)).value ?? GardenOptions.empty;
+    final prefixes = options.prefixesFor(invoiceType);
+    final typed = prefix.text.trim();
+    final Widget prefixField = prefixes.isEmpty
+        ? FieldInput(label: 'Prefix', hint: prefixHint, controller: prefix, error: prefixError, textCapitalization: TextCapitalization.characters)
+        : ValueRow(
+            label: 'Prefix',
+            value: typed.isEmpty ? null : typed,
+            error: prefixError,
+            onTap: () async {
+              final picked = await showPickerSheet<String>(
+                context,
+                title: 'Invoice prefix',
+                selected: typed,
+                searchable: prefixes.length > 8,
+                options: [for (final p in prefixes) PickOption(p, p), if (typed.isNotEmpty && !prefixes.contains(typed)) PickOption(typed, typed)],
+              );
+              if (picked != null) {
+                prefix.text = picked;
+                onChanged();
+              }
+            },
+          );
+    return Row(children: [
+      SizedBox(width: 120, child: prefixField),
+      Expanded(child: FieldInput(label: 'Invoice no', hint: numberHint, controller: number, error: numberError)),
+    ]);
   }
 }
 

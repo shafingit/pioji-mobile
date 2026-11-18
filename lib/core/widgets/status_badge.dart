@@ -41,3 +41,13 @@ Color toneColor(BuildContext context, Tone tone) {
     Tone.danger => c.danger,
   };
 }
+
+/// The colour for an API status value. Labels and option lists come from
+/// `GET /form-options`; this only picks a tint.
+Tone statusTone(String? value) => switch (value?.toLowerCase()) {
+      'received' || 'approved' || 'active' || 'matched' || 'completed' => Tone.success,
+      'evaluated' || 'assigned_to_buyers' || 'open' => Tone.accent,
+      'pending' || 'pending_evaluation' || 'parked' || 'held' || 'ok-bid hold' || 'price_mismatch' || 'qty_mismatch' || 'full' || 'processing' || 'passive' => Tone.warning,
+      'rejected' || 'expired' || 'unregistered' => Tone.danger,
+      _ => Tone.neutral,
+    };

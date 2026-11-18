@@ -19,16 +19,17 @@ import '../../../core/widgets/scaffolds.dart';
 import '../../../core/widgets/sheets.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../masters/data/form_options.dart';
 import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/contracts_repository.dart';
 import '../../../core/design/app_icons.dart';
 
-class ContractsListScreen extends StatelessWidget {
+class ContractsListScreen extends ConsumerWidget {
   const ContractsListScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ModuleListScreen<Contract>(
       title: 'Contracts',
       inTabs: false,
@@ -42,7 +43,7 @@ class ContractsListScreen extends StatelessWidget {
       newLabel: 'New contract',
       onNew: () => context.pushNamed(Routes.contractNew),
       actions: [AddButton(semanticLabel: 'New contract', onPressed: () => context.pushNamed(Routes.contractNew))],
-      segments: SegmentConfig(param: 'status', options: {'': 'All', for (final s in ContractStatus.values) s.api: s.label}),
+      segments: SegmentConfig(param: 'status', options: watchFormOptions(ref).map('contract_statuses', all: 'All')),
       filters: const [DateFilter('date_from', 'Effective from'), DateFilter('date_to', 'Expires by')],
       // Cover view: the validity and who it is with; the number and the
       // rest are on the detail screen.
@@ -51,7 +52,7 @@ class ContractsListScreen extends StatelessWidget {
           title: _range(k),
           subtitle: [_buyerName(ref, k) ?? 'No buyer', ?k.sellerName].join(' · '),
           onTap: () => context.pushNamed(Routes.contractDetail, pathParameters: {'id': '${k.id}'}, extra: k),
-          trailing: k.expiringSoon ? const StatusBadge('Expiring', tone: Tone.warning) : StatusBadge(k.status.label, tone: k.status.tone),
+          trailing: k.expiringSoon ? const StatusBadge('Expiring', tone: Tone.warning) : OptionBadge(list: 'contract_statuses', value: k.status),
         ),
       ),
     );
@@ -80,10 +81,12 @@ String? _buyerName(WidgetRef ref, Contract k) {
 class _ItemDraft {
   _ItemDraft([ContractItem? from])
       : grade = from?.grade,
+        currency = from?.currency,
         price = TextEditingController(text: Fmt.editable(from?.pricePerKg)),
         qty = TextEditingController(text: Fmt.editable(from?.quantity));
 
   String? grade;
+  String? currency;
   final TextEditingController price;
   final TextEditingController qty;
 
@@ -92,7 +95,8 @@ class _ItemDraft {
     qty.dispose();
   }
 
-  ContractItem toItem() => ContractItem(grade: grade, pricePerKg: Fmt.parse(price.text), quantity: Fmt.parse(qty.text));
+  ContractItem toItem(String? defaultCurrency) =>
+      ContractItem(grade: grade, pricePerKg: Fmt.parse(price.text), quantity: Fmt.parse(qty.text), currency: currency ?? defaultCurrency);
 }
 
 class ContractFormScreen extends ConsumerStatefulWidget {
@@ -108,10 +112,11 @@ class ContractFormScreen extends ConsumerStatefulWidget {
 class _ContractFormScreenState extends ConsumerState<ContractFormScreen> with FormSubmit {
   late final Contract? _e = widget.editing;
   late MasterItem? _seller = _e?.sellerId == null ? null : MasterItem(_e!.sellerId!, _e.sellerName ?? '#${_e.sellerId}');
+  late MasterItem? _garden = _e?.gardenId == null ? null : MasterItem(_e!.gardenId!, _e.gardenName ?? '#${_e.gardenId}');
   late MasterItem? _buyer = _e?.buyerId == null ? null : MasterItem(_e!.buyerId!, _e.buyerName ?? '#${_e.buyerId}');
   late DateTime _effective = _e?.effective ?? DateTime.now();
   late DateTime _expiry = _e?.expiry ?? DateTime.now().add(const Duration(days: 30));
-  late ContractStatus _status = _e?.status ?? ContractStatus.draft;
+  late String? _status = _e?.status;
   late final _title = TextEditingController(text: _e?.title);
   late final _number = TextEditingController(text: _e?.number);
   late final _prompt = TextEditingController(text: _e?.promptDays?.toString());
@@ -120,6 +125,26 @@ class _ContractFormScreenState extends ConsumerState<ContractFormScreen> with Fo
   late final _items = <_ItemDraft>[
     if (_e != null && _e.items.isNotEmpty) for (final i in _e.items) _ItemDraft(i) else _ItemDraft(),
   ];
+
+  /// Only the seller's gardens (`GET /contracts/gardens-by-seller`), as on
+  /// the website.
+  Future<void> _pickGarden() async {
+    final list = await ref.read(contractsRepositoryProvider).gardensBySeller(_seller!.id);
+    if (!mounted) return;
+    if (list.isEmpty) {
+      context.toast('No gardens are linked to this seller.');
+      return;
+    }
+    final picked = await showPickerSheet<int>(
+      context,
+      title: 'Garden',
+      selected: _garden?.id,
+      searchable: list.length > 8,
+      options: [for (final g in list) PickOption(g.garden.id, g.garden.name, subtitle: '${g.grades.length} grades')],
+    );
+    if (picked == null) return;
+    setState(() => _garden = list.firstWhere((g) => g.garden.id == picked).garden);
+  }
 
   @override
   void dispose() {
@@ -133,12 +158,14 @@ class _ContractFormScreenState extends ConsumerState<ContractFormScreen> with Fo
   }
 
   Future<void> _save() async {
-    final items = _items.map((d) => d.toItem()).where((i) => i.grade != null || i.pricePerKg != null).toList();
+    final currency = ref.read(formOptionsProvider).value?.initial('currencies');
+    final items = _items.map((d) => d.toItem(currency)).where((i) => i.grade != null || i.pricePerKg != null).toList();
     final ok = await submit<bool>(
       () async {
         final repo = ref.read(contractsRepositoryProvider);
         final body = <String, Object?>{
           'seller_id': _seller?.id,
+          'garden_id': _garden?.id,
           'buyer_id': _buyer?.id,
           'contract_title': _title.text.trim(),
           'contract_number': _number.text.trim(),
@@ -146,7 +173,7 @@ class _ContractFormScreenState extends ConsumerState<ContractFormScreen> with Fo
           'expiry_date': Fmt.api(_expiry),
           'prompt_days': int.tryParse(_prompt.text),
           'discount': Fmt.parse(_discount.text),
-          'status': _status.api,
+          'status': _status ?? ref.read(formOptionsProvider).value?.initial('contract_statuses'),
           'terms_and_conditions': _terms.text.trim(),
           'contract_items': [for (final i in items) i.toJson()],
         };
@@ -180,7 +207,7 @@ class _ContractFormScreenState extends ConsumerState<ContractFormScreen> with Fo
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final items = _items.map((d) => d.toItem()).toList();
+    final items = _items.map((d) => d.toItem(null)).toList();
     final qty = items.fold<double>(0, (s, i) => s + (i.quantity ?? 0));
     final value = items.fold<double>(0, (s, i) => s + i.value);
     return FormScaffold(
@@ -193,7 +220,23 @@ class _ContractFormScreenState extends ConsumerState<ContractFormScreen> with Fo
         GroupedSection(
           label: 'Parties',
           children: [
-            MasterPickerRow(label: 'Seller', provider: sellersProvider, value: _seller, onChanged: (s) => setState(() => _seller = s), error: err('seller_id')),
+            MasterPickerRow(
+              label: 'Seller',
+              provider: sellersProvider,
+              value: _seller,
+              onChanged: (s) => setState(() {
+                if (s?.id != _seller?.id) _garden = null;
+                _seller = s;
+              }),
+              error: err('seller_id'),
+            ),
+            ValueRow(
+              label: 'Garden',
+              value: _garden?.name,
+              placeholder: _seller == null ? 'Choose a seller first' : 'Not set',
+              error: err('garden_id'),
+              onTap: _seller == null ? null : _pickGarden,
+            ),
             MasterPickerRow(label: 'Buyer', provider: buyersProvider, value: _buyer, placeholder: 'Optional', onChanged: (b) => setState(() => _buyer = b), error: err('buyer_id')),
           ],
         ),
@@ -208,15 +251,7 @@ class _ContractFormScreenState extends ConsumerState<ContractFormScreen> with Fo
               Expanded(child: FieldInput(label: 'Prompt days', hint: '14', controller: _prompt, keyboardType: TextInputType.number, inputFormatters: digitsOnly)),
               Expanded(child: FieldInput(label: 'Discount', hint: '0', controller: _discount, suffix: '%', keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: decimalOnly)),
             ]),
-            ValueRow(
-              label: 'Status',
-              value: _status.label,
-              onTap: () async {
-                final s = await showPickerSheet<ContractStatus>(context,
-                    title: 'Status', selected: _status, searchable: false, options: [for (final s in ContractStatus.values) PickOption(s, s.label)]);
-                if (s != null) setState(() => _status = s);
-              },
-            ),
+            OptionRow(label: 'Status', list: 'contract_statuses', value: _status ?? watchFormOptions(ref).initial('contract_statuses'), error: err('status'), onChanged: (v) => setState(() => _status = v)),
           ],
         ),
         for (var i = 0; i < _items.length; i++)
@@ -229,7 +264,8 @@ class _ContractFormScreenState extends ConsumerState<ContractFormScreen> with Fo
                   )
                 : null,
             children: [
-              GradePickerRow(value: _items[i].grade, onChanged: (g) => setState(() => _items[i].grade = g)),
+              GradePickerRow(gardenId: _garden?.id, value: _items[i].grade, onChanged: (g) => setState(() => _items[i].grade = g)),
+              OptionRow(label: 'Currency', list: 'currencies', value: _items[i].currency ?? watchFormOptions(ref).initial('currencies'), onChanged: (v) => setState(() => _items[i].currency = v)),
               Row(children: [
                 Expanded(child: FieldInput(label: 'Price per kg', hint: '320.00', suffix: '₹', controller: _items[i].price, error: err('contract_items.$i.price_per_kg'), onChanged: (_) => setState(() {}), keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: decimalOnly)),
                 Expanded(child: FieldInput(label: 'Quantity', hint: '5000', suffix: 'kg', controller: _items[i].qty, onChanged: (_) => setState(() {}), keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: decimalOnly)),
@@ -252,12 +288,12 @@ class _ContractFormScreenState extends ConsumerState<ContractFormScreen> with Fo
   }
 }
 
-class ContractDetailScreen extends StatelessWidget {
+class ContractDetailScreen extends ConsumerWidget {
   const ContractDetailScreen({super.key, required this.contract});
   final Contract? contract;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final k = contract;
     if (k == null) return const MissingItemScreen(what: 'contract');
     final c = context.colors;
@@ -272,8 +308,9 @@ class ContractDetailScreen extends StatelessWidget {
         GroupedSection(
           children: [
             InfoRow('Number', k.number),
-            InfoRow('Status', k.expiringSoon ? 'Expiring soon' : k.status.label, valueColor: k.expiringSoon ? c.warning : null),
+            InfoRow('Status', k.expiringSoon ? 'Expiring soon' : watchFormOptions(ref).label('contract_statuses', k.status), valueColor: k.expiringSoon ? c.warning : null),
             InfoRow('Seller', k.sellerName),
+            if (k.gardenName != null) InfoRow('Garden', k.gardenName),
             Consumer(builder: (context, ref, _) => InfoRow('Buyer', _buyerName(ref, k))),
             InfoRow('Valid', '${Fmt.day(k.effective)} – ${Fmt.day(k.expiry)}'),
             InfoRow('Prompt days', k.promptDays?.toString()),
