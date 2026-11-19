@@ -125,12 +125,8 @@ abstract final class AppRadius {
 }
 
 abstract final class AppShadow {
+  /// A faint lift, close to the flat tonal cards on Home.
   static const card = [
-    BoxShadow(color: Color(0x0A000000), blurRadius: 2, offset: Offset(0, 1)),
-    BoxShadow(color: Color(0x09000000), blurRadius: 16, offset: Offset(0, 6)),
-  ];
-  /// Lighter than [card], for small tiles like the Home quick actions.
-  static const soft = [
     BoxShadow(color: Color(0x05000000), blurRadius: 1, offset: Offset(0, 0.5)),
     BoxShadow(color: Color(0x06000000), blurRadius: 14, offset: Offset(0, 4)),
   ];

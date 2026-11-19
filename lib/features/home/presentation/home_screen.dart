@@ -261,7 +261,7 @@ class _Quick extends StatelessWidget {
                 height: 56,
                 decoration: ShapeDecoration(
                   color: c.surface,
-                  shadows: c.cardShadow.isEmpty ? null : AppShadow.soft,
+                  shadows: c.cardShadow,
                   shape: const RoundedSuperellipseBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
                 ),
                 child: AppIcon(icon, color: c.accent, size: 24),
