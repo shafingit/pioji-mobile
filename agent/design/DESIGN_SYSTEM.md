@@ -24,14 +24,14 @@ Approved by the user on 29 Oct 2026. Source of truth in code: `lib/core/design/t
 
 ## Shape and depth
 
-- **Cards have no border.** They stand out by tone (surface on background) plus a two-layer shadow in light mode only (`0 1 2 @4%`, `0 6 16 @3.5%`). Dark mode: no shadow.
+- **Cards have no border.** They stand out by tone (surface on background) plus a faint two-layer shadow in light mode only (`0 0.5 1 @2%`, `0 4 14 @2.5%`). Dark mode: no shadow.
 - Smooth corners via `RoundedSuperellipseBorder`: control 11, card 14, sheet 20, tile 7–8.
 - Sections are one flat surface (radius 11, no shadow) with full-width 0.5 px hairlines between rows.
 - No blur, no frosted glass, no gradients except the tab bar.
 
 ## Typography
 
-Montserrat on both platforms, bundled in `assets/fonts/` (OFL, licence alongside). No monospace, even for invoice and tracking numbers. Two working weights: 400 and 600 (500 for row titles). Title 20 (tab screens), headline 17 (pushed screens), large title 30 (sign in, onboarding), headline 17, body 16, callout 15, footnote 13, caption 12, tab label 11. Selected states change colour, never weight or size.
+Montserrat on both platforms, bundled in `assets/fonts/` (OFL, licence alongside). No monospace, even for invoice and tracking numbers. Two working weights: 400 and 600 (500 for row titles). Title 20 (tab screens), headline 16 (pushed screens), large title 30 (sign in, onboarding), body 15, callout 14, footnote 12.5, caption 12, tab label 11. Selected states change colour, never weight or size.
 
 ## Controls and icons (since 12 Nov 2026)
 
