@@ -6,7 +6,7 @@ Approved by the user on 29 Oct 2026. Source of truth in code: `lib/core/design/t
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| background | `#F0F3F1` | `#0A0D0B` | Screen background |
+| background | `#F6F8F7` | `#0A0D0B` | Screen background |
 | surface | `#FFFFFF` | `#181D1A` | Cards, grouped lists |
 | surfaceRaised | `#FFFFFF` | `#222824` | Sheets, dialogs |
 | fill | `#768079` @ 12% | `#3A423D` | Segmented track, search field |
@@ -31,7 +31,7 @@ Approved by the user on 29 Oct 2026. Source of truth in code: `lib/core/design/t
 
 ## Typography
 
-Inter on both platforms, bundled in `assets/fonts/`. No monospace, even for invoice and tracking numbers. Two working weights: 400 and 600 (500 for row titles). Title 20 (tab screens), headline 17 (pushed screens), large title 30 (sign in, onboarding), headline 17, body 16, callout 15, footnote 13, caption 12, tab label 11. Selected states change colour, never weight or size.
+Montserrat on both platforms, bundled in `assets/fonts/` (OFL, licence alongside). No monospace, even for invoice and tracking numbers. Two working weights: 400 and 600 (500 for row titles). Title 20 (tab screens), headline 17 (pushed screens), large title 30 (sign in, onboarding), headline 17, body 16, callout 15, footnote 13, caption 12, tab label 11. Selected states change colour, never weight or size.
 
 ## Controls and icons (since 12 Nov 2026)
 
@@ -43,7 +43,7 @@ Inter on both platforms, bundled in `assets/fonts/`. No monospace, even for invo
 
 1. No hover, focus ring, ripple or press effects on any control. Keep only selected, disabled, invalid, loading.
 2. Text in rows never wraps: one line + ellipsis + long-press tooltip; short numbers may scale down.
-3. Tab bar: 5 tabs (Samples, Offers, **Home in the centre, selected on launch**, Bids, More), all the same size. No top line, no blur. One gradient: transparent at the top of a 60 px fade, solid by the icons, deepening to `barDeep` at the bottom edge. Inactive icon tiles have no background.
+3. Tab bar: 5 tabs (**Home first, selected on launch**, Samples, Offers, Bids, More), all the same size. No top line, no blur. One gradient: transparent at the top of a 60 px fade, solid by the icons, deepening to `barDeep` at the bottom edge. Inactive icon tiles have no background.
 4. Primary buttons are deep fills with white text in both themes; destructive buttons are deep red with white text.
 5. Selected backgrounds are a subtle accent tint, never a heavy fill.
 6. The logo is the two-leaf mark in the accent colour, never on a coloured tile. App icons sit on the neutral background (`#F0F3F1` light, `#0A0D0B` dark). Sources: `assets/icon/*.svg`.

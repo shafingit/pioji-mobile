@@ -14,6 +14,7 @@ enum AppIcons {
   contracts('contracts'),
   sales('sales'),
   exFactory('ex_factory'),
+  tasting('tasting'),
   more('more'),
   // Actions
   search('search'),

@@ -25,6 +25,7 @@ Future<T?> showPickerSheet<T>(
   bool searchable = true,
 }) {
   return showModalBottomSheet<T>(
+    useSafeArea: true,
     context: context,
     isScrollControlled: true,
     builder: (ctx) => _PickerSheet<T>(title: title, options: options, selected: selected, searchable: searchable),
@@ -326,6 +327,7 @@ Future<String?> chooseAction(
   Set<String> destructive = const {},
 }) {
   return showModalBottomSheet<String>(
+    useSafeArea: true,
     context: context,
     builder: (ctx) {
       final c = ctx.colors;

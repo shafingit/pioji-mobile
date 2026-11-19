@@ -69,6 +69,15 @@ class BatchesRepository {
         'sample_ids': sampleIds,
       }));
 
+  /// Batches the given samples the way the website does: the server numbers
+  /// them and splits them into as many batches as needed
+  /// (`POST /batches/create-from-selection`).
+  Future<List<Batch>> createFromSelection(List<int> sampleIds) async {
+    final data = J.map(await _api.post('/batches/create-from-selection', {'sample_ids': sampleIds})) ?? const {};
+    final list = data['batches'] as List? ?? const [];
+    return list.whereType<Map<String, dynamic>>().map((e) => Batch.fromJson(J.map(e['batch']) ?? e)).toList();
+  }
+
   /// Returns the batches the server created, when it reports them.
   Future<List<Batch>> createForDate(DateTime date) async {
     final data = await _api.post('/batches/create-for-date', {'date': Fmt.api(date)});

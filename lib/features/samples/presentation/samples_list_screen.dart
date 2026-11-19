@@ -32,6 +32,7 @@ class SamplesListScreen extends ConsumerWidget {
       newLabel: 'New sample',
       onNew: () => context.pushNamed(Routes.sampleNew),
       actions: [
+        LinkButton(label: 'Upload', onPressed: () => context.pushNamed(Routes.sampleUpload)),
         LinkButton(label: 'Batches', onPressed: () => context.pushNamed(Routes.batches)),
         AddButton(semanticLabel: 'New sample', onPressed: () => context.pushNamed(Routes.sampleNew)),
       ],

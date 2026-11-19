@@ -80,7 +80,7 @@ class MoreScreen extends ConsumerWidget {
                 reg(AppIcons.courier, 'Courier register', Routes.courier),
                 reg(AppIcons.contracts, 'Contracts', Routes.contracts),
                 reg(AppIcons.sales, 'Sales register', Routes.sales),
-                reg(AppIcons.allDone, 'Tasting report', Routes.tastingReport),
+                reg(AppIcons.tasting, 'Tasting report', Routes.tastingReport),
                 reg(AppIcons.exFactory, 'Ex-factory register', Routes.exFactory, meta: mismatches > 0 ? '$mismatches mismatches' : null),
               ],
             ),

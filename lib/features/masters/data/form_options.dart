@@ -148,14 +148,20 @@ class OptionSegments extends ConsumerWidget {
 
 /// A status badge whose text comes from a `GET /form-options` list.
 class OptionBadge extends ConsumerWidget {
-  const OptionBadge({super.key, required this.list, required this.value});
+  const OptionBadge({super.key, required this.list, required this.value, this.short = false});
 
   final String list;
   final String? value;
 
+  /// For tight rows: the label without its bracketed note, e.g.
+  /// "Open (Negotiation Active)" → "Open".
+  final bool short;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (value == null || value!.isEmpty) return const SizedBox.shrink();
-    return StatusBadge(watchFormOptions(ref).label(list, value)!, tone: statusTone(value));
+    final label = watchFormOptions(ref).label(list, value)!;
+    final shown = short ? label.split(' (').first.trim() : label;
+    return StatusBadge(shown.isEmpty ? label : shown, tone: statusTone(value));
   }
 }

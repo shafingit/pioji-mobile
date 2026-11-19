@@ -72,6 +72,23 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
   /// The chosen grade as the garden has it set up (id and invoice type).
   GardenGrade? get _gardenGrade => _garden == null ? null : ref.read(gardenOptionsProvider(_garden!.id)).value?.grade(_grade);
 
+  /// The grade and prefix as the API takes them: a value the garden has no
+  /// set-up for goes as "Other" with the typed text (`grade_custom`,
+  /// `invoice_prefix_custom`), as on the website.
+  Map<String, Object?> _gradeAndPrefix() {
+    final options = _garden == null ? null : ref.read(gardenOptionsProvider(_garden!.id)).value;
+    final prefix = _prefix.text.trim();
+    final otherGrade = options != null && _grade != null && options.grade(_grade) == null;
+    final otherPrefix = options != null && prefix.isNotEmpty && !options.prefixesFor(null).contains(prefix);
+    return {
+      'grade': otherGrade ? 'Other' : _grade,
+      if (otherGrade) 'grade_custom': _grade,
+      'grade_id': _gardenGrade?.id,
+      'invoice_prefix': otherPrefix ? 'Other' : prefix,
+      if (otherPrefix) 'invoice_prefix_custom': prefix,
+    };
+  }
+
   /// A different garden has its own grades and prefixes, so those reset.
   void _setGarden(MasterItem? g) => setState(() {
         if (g?.id != _garden?.id) {
@@ -88,9 +105,7 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
         ..._x.body(),
         'arrival_date': Fmt.api(_arrival),
         'garden_id': _garden?.id,
-        'grade': _grade,
-        'grade_id': _gardenGrade?.id,
-        'invoice_prefix': _prefix.text.trim(),
+        ..._gradeAndPrefix(),
         'inv_no': _inv.text.trim(),
         'packages': int.tryParse(_pkgs.text),
         'weight': Fmt.parse(_nett.text),

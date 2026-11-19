@@ -13,11 +13,14 @@ abstract final class Routes {
   static const sampleEdit = 'sampleEdit';
   static const sampleTasting = 'sampleTasting';
   static const tastingReport = 'tastingReport';
+  static const sampleUpload = 'sampleUpload';
   static const batches = 'batches';
   static const batchNew = 'batchNew';
   static const batchAuto = 'batchAuto';
   static const batchDetail = 'batchDetail';
   static const batchEdit = 'batchEdit';
+  static const batchTesting = 'batchTesting';
+  static const batchResults = 'batchResults';
 
   static const offers = 'offers';
   static const offerNew = 'offerNew';

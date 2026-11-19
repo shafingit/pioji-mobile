@@ -69,6 +69,17 @@ class Api {
     return unwrap(res.data);
   }
 
+  /// Like [post], but returns the whole response body, for answers with
+  /// keys next to `data` (e.g. `has_next`).
+  /// With [file], the body is sent as a form with the file under `file`.
+  Future<Map<String, dynamic>> postBody(String path, Map<String, Object?> body, {String? file}) async {
+    final Object data = file == null
+        ? body
+        : FormData.fromMap({...body, 'file': await MultipartFile.fromFile(file, filename: file.split('/').last)});
+    final res = await _guard(() => dio.post<dynamic>(path, data: data, options: file == null ? Options(contentType: Headers.jsonContentType) : null));
+    return J.map(res.data) ?? const {};
+  }
+
   Future<Object?> put(String path, Map<String, Object?> body) async {
     final res = await _guard(() => dio.put<dynamic>(
           path,

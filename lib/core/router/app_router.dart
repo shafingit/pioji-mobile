@@ -8,6 +8,7 @@ import '../../features/auth/domain/user.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/batches/data/batches_repository.dart';
+import '../../features/batches/presentation/batch_testing_screens.dart';
 import '../../features/batches/presentation/batches_screens.dart';
 import '../../features/bid_book/data/bid_book_repository.dart';
 import '../../features/bid_book/presentation/bid_book_screens.dart';
@@ -25,6 +26,7 @@ import '../../features/samples/data/samples_repository.dart';
 import '../../features/samples/domain/sample.dart';
 import '../../features/samples/presentation/sample_detail_screen.dart';
 import '../../features/samples/presentation/sample_form_screen.dart';
+import '../../features/samples/presentation/sample_upload_screen.dart';
 import '../../features/samples/presentation/samples_list_screen.dart';
 import '../../features/sales_register/data/sales_repository.dart';
 import '../../features/sales_register/presentation/sales_screens.dart';
@@ -112,17 +114,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, _, shell) => ShellScaffold(shell: shell),
         branches: [
           StatefulShellBranch(routes: [
+            GoRoute(path: '/home', name: Routes.home, builder: (_, _) => const HomeScreen()),
+          ]),
+          StatefulShellBranch(routes: [
             GoRoute(
               path: '/samples',
               name: Routes.samples,
               builder: (_, _) => const SamplesListScreen(),
               routes: [
                 _top('new', Routes.sampleNew, (_) => const SampleFormScreen()),
+                _top('upload', Routes.sampleUpload, (_) => const SampleUploadScreen()),
                 GoRoute(path: 'batches', name: Routes.batches, builder: (_, _) => const BatchesListScreen(), routes: [
                   _top('new', Routes.batchNew, (_) => const BatchFormScreen()),
                   _top('auto', Routes.batchAuto, (_) => const AutoBatchScreen()),
                   GoRoute(path: ':id', name: Routes.batchDetail, builder: (_, s) => _detail<Batch>(s, 'batch', (r, id) => r.read(batchesRepositoryProvider).get(id), (x) => BatchDetailScreen(batch: x)), routes: [
                     _top('edit', Routes.batchEdit, (s) => BatchEditScreen(batch: _extra<Batch>(s))),
+                    _top('testing', Routes.batchTesting, (s) => TestingSessionScreen(batchId: int.parse(s.pathParameters['id']!), batchName: _extra<String>(s))),
+                    _top('results', Routes.batchResults, (s) => TestingResultsScreen(batchId: int.parse(s.pathParameters['id']!), batchName: _extra<String>(s))),
                   ]),
                 ]),
                 GoRoute(path: ':id', name: Routes.sampleDetail, routes: [
@@ -145,9 +153,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ]),
               ],
             ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/home', name: Routes.home, builder: (_, _) => const HomeScreen()),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(

@@ -13,15 +13,15 @@ class _Tab {
 }
 
 const _tabs = [
+  _Tab('Home', AppIcons.home),
   _Tab('Samples', AppIcons.samples),
   _Tab('Offers', AppIcons.offers),
-  _Tab('Home', AppIcons.home),
   _Tab('Bids', AppIcons.bids),
   _Tab('More', AppIcons.more),
 ];
 
-/// Tab shell: bottom bar on phones, a left rail on tablets. Home sits in the
-/// centre and is selected on launch.
+/// Tab shell: bottom bar on phones, a left rail on tablets. Home is the first
+/// tab and is selected on launch.
 class ShellScaffold extends StatelessWidget {
   const ShellScaffold({super.key, required this.shell});
   final StatefulNavigationShell shell;

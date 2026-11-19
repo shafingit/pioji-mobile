@@ -252,31 +252,42 @@ class _ModuleListScreenState<T> extends ConsumerState<ModuleListScreen<T>> {
           final bySub = g.subgroup == null ? 0 : _compare(g.subgroup!(a), g.subgroup!(b));
           return bySub != 0 ? bySub : (g.order == null ? 0 : _compare(g.order!(a), g.order!(b)));
         });
-      final children = <Widget>[];
-      String? lastSub;
-      for (var i = 0; i < rows.length; i++) {
-        final sub = g.subgroup?.call(rows[i]);
-        if (g.subgroup != null && (i == 0 || sub != lastSub)) {
-          final count = rows.where((r) => g.subgroup!(r) == sub).length;
-          if (i > 0) children.add(const Divider(height: 0.5));
-          children.add(Container(
-            color: c.background,
-            padding: const EdgeInsets.fromLTRB(AppSpace.lg - 2, 6, AppSpace.lg - 2, 6),
-            child: Text('${sub ?? 'No mark'} · $count',
-                style: AppText.caption.copyWith(color: c.textSecondary, fontWeight: FontWeight.w600)),
-          ));
-        } else if (i > 0) {
-          children.add(const Divider(height: 0.5));
-        }
-        lastSub = sub;
-        children.add(widget.itemBuilder(context, rows[i]));
+      if (g.subgroup == null) {
+        out.add(SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.lg),
+            child: GroupedSection(
+              label: '${e.key} · ${rows.length}',
+              children: [for (final r in rows) widget.itemBuilder(context, r)],
+            ),
+          ),
+        ));
+        continue;
+      }
+      // Each mark is its own card under a small label, all under the
+      // section heading (e.g. the date).
+      final byMark = <String?, List<T>>{};
+      for (final r in rows) {
+        byMark.putIfAbsent(g.subgroup!(r), () => []).add(r);
       }
       out.add(SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.only(bottom: AppSpace.lg),
-          child: GroupedSection(
-            label: '${e.key} · ${rows.length}',
-            children: [Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children)],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(AppSpace.xs, 0, AppSpace.xs, AppSpace.sm),
+                child: Text('${e.key} · ${rows.length}', style: AppText.footnote.copyWith(color: c.textPrimary, fontWeight: FontWeight.w600)),
+              ),
+              for (final (i, m) in byMark.entries.indexed) ...[
+                if (i > 0) const SizedBox(height: AppSpace.md),
+                GroupedSection(
+                  label: '${m.key ?? 'No mark'} · ${m.value.length}',
+                  children: [for (final r in m.value) widget.itemBuilder(context, r)],
+                ),
+              ],
+            ],
           ),
         ),
       ));
@@ -349,6 +360,7 @@ class _ModuleListScreenState<T> extends ConsumerState<ModuleListScreen<T>> {
     final q = ref.read(widget.queryProvider);
     final ctl = ref.read(widget.queryProvider.notifier);
     await showModalBottomSheet<void>(
+      useSafeArea: true,
       context: context,
       isScrollControlled: true,
       builder: (ctx) => _FilterSheet(filters: widget.filters, initial: q, onApply: ctl.replace),
@@ -462,6 +474,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                         value: options[_q.params[f.param]],
                         onTap: () async {
                           final picked = await showModalBottomSheet<String>(
+                            useSafeArea: true,
                             context: context,
                             builder: (ctx) => SafeArea(
                               child: ListView(

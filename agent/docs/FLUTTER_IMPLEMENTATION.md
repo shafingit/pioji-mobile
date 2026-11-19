@@ -336,7 +336,7 @@ Theme mode follows the system by default. Settings offers System / Light / Dark,
 
 ### 5.5 Bottom tab bar
 
-- Five tabs. Home sits in the centre, is selected on launch, and is the same size as the other tabs (none raised).
+- Five tabs. Home is the first tab, is selected on launch, and is the same size as the other tabs (none raised).
 - Each icon sits on a 28 px square tile (radius `tile`) inside a 48 px target, with equal padding all round. The active tile gets the `accentTint` background and the `accent` icon colour; inactive tiles get a solid `background` base so scrolling content never shows through them.
 - Labels at 11 px. Active labels change colour only.
 - No top border line, no blur, no frosted glass. The bar is one `LinearGradient` over a 142 px area (82 px bar plus a 60 px fade above it): transparent at the top edge and getting continuously deeper all the way to the bottom edge, like a shadow rising from below. Opacity ramps from 0 at the top to full right where the icons begin (42%), so the tall fade zone stays see-through while content edges never cut across the icons, and the colour shifts from the screen `background` to a deeper shade (light `#C9D3CD`, dark `#000000`) across the whole height, with no flat middle band. Both ramps follow the smootherstep curve `t*t*t*(t*(6t-15)+10)`, with 25 stops, so there is no hard upper line. Inactive icon tiles have no background of their own (the bar is already solid behind them), so no squares show.
@@ -388,7 +388,7 @@ All live in `core/widgets/` and read only from tokens.
 |---|---|---|---|
 | Samples | `lab_flask` | Samples list | Batches, unbatched samples |
 | Offers | `doc_text` | Offer lists | Samples offered today (allocation) |
-| **Home** (centre, default) | `house` | Dashboard | Shortcuts to every module |
+| **Home** (first, default) | `house` | Dashboard | Shortcuts to every module |
 | Bids | `hammer` | Bid book | — |
 | More | `square_grid_2x2` | Module menu | Courier register, contracts, sales register, ex-factory, settings |
 

@@ -19,6 +19,7 @@ import '../../../core/widgets/controls.dart';
 /// filters by `garden_id`, shows the garden name.
 Future<({String value, String label})?> pickMark(BuildContext context) async {
   final g = await showModalBottomSheet<MasterItem>(
+    useSafeArea: true,
     context: context,
     isScrollControlled: true,
     builder: (_) => _RemoteSearchSheet(title: 'Mark', path: '/gardens', initial: gardensProvider),
@@ -168,6 +169,7 @@ class MasterPickerRow extends ConsumerWidget {
       onTap: () async {
         if (searchPath != null) {
           final picked = await showModalBottomSheet<MasterItem>(
+            useSafeArea: true,
             context: context,
             isScrollControlled: true,
             builder: (_) => _RemoteSearchSheet(title: label, path: searchPath!, initial: provider, selectedId: value?.id),
@@ -185,6 +187,7 @@ class MasterPickerRow extends ConsumerWidget {
         }
         final picked = creatable != null
             ? await showModalBottomSheet<MasterItem>(
+                useSafeArea: true,
                 context: context,
                 isScrollControlled: true,
                 builder: (_) => _CreatableSheet(title: label, provider: provider, kind: creatable, selectedId: value?.id),
@@ -352,11 +355,22 @@ class GradePickerRow extends ConsumerWidget {
           context,
           title: forGarden.isNotEmpty ? '$label for this garden' : label,
           selected: value,
-          options: forGarden.isNotEmpty
-              ? [for (final g in forGarden) PickOption(g.code, g.code, subtitle: [if (g.name != g.code) g.name, ?g.invoiceType].join(' · '))]
-              : [for (final g in grades) PickOption(g, g)],
+          options: [
+            ...forGarden.isNotEmpty
+                ? [for (final g in forGarden) PickOption(g.code, g.code, subtitle: [if (g.name != g.code) g.name, ?g.invoiceType].join(' · '))]
+                : [for (final g in grades) PickOption(g, g)],
+            if (value != null && !forGarden.any((g) => g.code == value) && (forGarden.isNotEmpty || !grades.contains(value)))
+              PickOption(value!, value!, subtitle: 'Other'),
+            if (gardenId != null) const PickOption(_other, 'Other…', subtitle: 'A grade this garden has no set-up for'),
+          ],
         );
-        if (picked != null) onChanged(picked);
+        if (picked == _other) {
+          if (!context.mounted) return;
+          final typed = await askOther(context, title: 'Other grade', label: 'Grade', current: value);
+          if (typed != null) onChanged(typed);
+        } else if (picked != null) {
+          onChanged(picked);
+        }
       },
     );
   }
@@ -406,9 +420,19 @@ class InvoiceNumberRow extends ConsumerWidget {
                 title: 'Invoice prefix',
                 selected: typed,
                 searchable: prefixes.length > 8,
-                options: [for (final p in prefixes) PickOption(p, p), if (typed.isNotEmpty && !prefixes.contains(typed)) PickOption(typed, typed)],
+                options: [
+                  for (final p in prefixes) PickOption(p, p),
+                  if (typed.isNotEmpty && !prefixes.contains(typed)) PickOption(typed, typed, subtitle: 'Other'),
+                  const PickOption(_other, 'Other…', subtitle: 'A prefix this garden has no set-up for'),
+                ],
               );
-              if (picked != null) {
+              if (picked == _other) {
+                if (!context.mounted) return;
+                final other = await askOther(context, title: 'Other prefix', label: 'Prefix', current: typed);
+                if (other == null) return;
+                prefix.text = other;
+                onChanged();
+              } else if (picked != null) {
                 prefix.text = picked;
                 onChanged();
               }
@@ -420,6 +444,28 @@ class InvoiceNumberRow extends ConsumerWidget {
     ]);
   }
 }
+
+/// Asks for a value the list doesn't have (an "Other" grade or prefix).
+Future<String?> askOther(BuildContext context, {required String title, required String label, String? current}) {
+  final ctl = TextEditingController(text: current ?? '');
+  return showAppDialog<String>(
+    context,
+    builder: (ctx) => AppDialog(
+      title: title,
+      body: "Saved as typed, marked as Other, as on the website.",
+      content: AppCard(child: FieldInput(label: label, controller: ctl, textCapitalization: TextCapitalization.characters)),
+      actions: [
+        AppDialogAction('Cancel', () => Navigator.pop(ctx)),
+        AppDialogAction('Use', () {
+          final v = ctl.text.trim();
+          Navigator.pop(ctx, v.isEmpty ? null : v);
+        }, primary: true),
+      ],
+    ),
+  );
+}
+
+const _other = '\u0000other';
 
 Future<int?> _askId(BuildContext context, String label, int? current) {
   final ctl = TextEditingController(text: current?.toString() ?? '');
@@ -457,6 +503,7 @@ class PartyPickerRow extends ConsumerWidget {
       placeholder: 'Buyer or name',
       onTap: () async {
         final picked = await showModalBottomSheet<String>(
+          useSafeArea: true,
           context: context,
           isScrollControlled: true,
           builder: (_) => _PartySheet(title: label, current: v),

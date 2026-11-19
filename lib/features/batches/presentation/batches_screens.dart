@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/application/invalidation.dart';
 import '../../../core/design/context_ext.dart';
@@ -27,6 +28,8 @@ import '../data/batches_repository.dart';
 import '../../../core/design/app_icons.dart';
 import '../../../core/widgets/controls.dart';
 import '../../masters/data/form_options.dart';
+import '../data/batch_testing.dart';
+import 'batch_testing_screens.dart';
 
 class BatchesListScreen extends ConsumerWidget {
   const BatchesListScreen({super.key});
@@ -45,6 +48,7 @@ class BatchesListScreen extends ConsumerWidget {
       newLabel: 'Auto-batch a date',
       onNew: () => context.pushNamed(Routes.batchAuto),
       actions: [
+        const _ExportBatchesButton(),
         LinkButton(label: 'Auto-batch', onPressed: () => context.pushNamed(Routes.batchAuto)),
         AddButton(semanticLabel: 'New batch', onPressed: () => context.pushNamed(Routes.batchNew)),
       ],
@@ -101,7 +105,6 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> with FormSubm
       final sel = await showMultiPickerSheet<int>(
         context,
         title: 'Add samples',
-        max: kBatchCap,
         selected: _ids,
         options: [for (final s in samples) PickOption(s.id, s.title, subtitle: Fmt.invoice(s.invoicePrefix, s.invoiceNo))],
       );
@@ -116,23 +119,33 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> with FormSubm
     }
   }
 
+  /// Without a custom name, or with more samples than one batch holds, the
+  /// server numbers and splits the batches as the website does
+  /// (`create-from-selection`); otherwise one named batch is created.
+  bool get _bySelection => _name.text.trim().isEmpty || _ids.length > kBatchCap;
+
   Future<void> _save() async {
-    final ok = await submit<bool>(() async {
-      await ref.read(batchesRepositoryProvider).create(
-            name: _name.text.trim(),
-            date: _date,
-            status: _status ?? ref.read(formOptionsProvider).value?.initial('batch_statuses'),
-            notes: _notes.text.trim(),
-            sampleIds: _ids.toList(),
-          );
-      return true;
-    });
-    if (ok == true && mounted) {
+    final made = await submit<int>(
+      () async {
+        final repo = ref.read(batchesRepositoryProvider);
+        if (_bySelection) return (await repo.createFromSelection(_ids.toList())).length;
+        await repo.create(
+          name: _name.text.trim(),
+          date: _date,
+          status: _status ?? ref.read(formOptionsProvider).value?.initial('batch_statuses'),
+          notes: _notes.text.trim(),
+          sampleIds: _ids.toList(),
+        );
+        return 1;
+      },
+      clientErrors: {if (_ids.isEmpty) 'sample_ids': 'Add at least one sample.'},
+    );
+    if (made != null && mounted) {
       ref.invalidate(batchesListProvider);
       ref.invalidate(unbatchedProvider);
       ref.invalidate(samplesListProvider);
       refreshSummaries(ref);
-      context.toast('Batch created');
+      context.toast(made > 1 ? '$made batches created' : 'Batch created');
       context.pop();
     }
   }
@@ -149,7 +162,7 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> with FormSubm
         GroupedSection(
           label: 'Batch',
           children: [
-            FieldInput(label: 'Name', hint: 'Generated automatically if empty', controller: _name, error: err('batch_name')),
+            FieldInput(label: 'Name', hint: 'Numbered automatically if empty', controller: _name, error: err('batch_name'), onChanged: (_) => setState(() {})),
             DateRow(
               label: 'Date',
               value: _date,
@@ -165,8 +178,12 @@ class _BatchFormScreenState extends ConsumerState<BatchFormScreen> with FormSubm
         ),
         GroupedSection(
           label: 'Samples',
-          trailingLabel: Text('${_ids.length} / $kBatchCap', style: AppText.footnote.copyWith(color: context.colors.textTertiary)),
-          footer: err('sample_ids') == null ? null : Text(err('sample_ids')!, style: TextStyle(color: context.colors.danger)),
+          trailingLabel: Text('${_ids.length} selected', style: AppText.footnote.copyWith(color: context.colors.textTertiary)),
+          footer: err('sample_ids') != null
+              ? Text(err('sample_ids')!, style: TextStyle(color: context.colors.danger))
+              : Text(_bySelection
+                  ? 'Batches are numbered by the server, $kBatchCap samples each; more samples make more batches.'
+                  : 'One batch named as above.'),
           children: [
             for (final s in _picked) SampleRow(sample: s),
             ValueRow(label: _picked.isEmpty ? 'Add samples' : 'Change samples', value: null, placeholder: '', onTap: _pickSamples),
@@ -269,11 +286,11 @@ class BatchDetailScreen extends ConsumerWidget {
         GroupedSection(
           children: [
             InfoRow('Date', Fmt.day(b.date)),
-            InfoRow('Status', watchFormOptions(ref).label('batch_statuses', b.status)),
             InfoRow('Samples', '${b.count} / ${b.cap}'),
             if (b.notes != null) InfoBlock('Notes', b.notes!),
           ],
         ),
+        BatchActionsSection(batch: b),
         if (b.samples.isNotEmpty)
           GroupedSection(label: 'Samples', children: [for (final s in b.samples) SampleRow(sample: s)]),
         DeleteRecordButton(
@@ -352,4 +369,34 @@ class _BatchEditScreenState extends ConsumerState<BatchEditScreen> with FormSubm
       ],
     );
   }
+}
+
+/// Exports every batch as CSV (`GET /batches/export`) and opens the share sheet.
+class _ExportBatchesButton extends ConsumerStatefulWidget {
+  const _ExportBatchesButton();
+
+  @override
+  ConsumerState<_ExportBatchesButton> createState() => _ExportBatchesButtonState();
+}
+
+class _ExportBatchesButtonState extends ConsumerState<_ExportBatchesButton> {
+  bool _busy = false;
+
+  Future<void> _export() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final path = await ref.read(batchTestingRepositoryProvider).export();
+      await SharePlus.instance.share(ShareParams(files: [XFile(path, mimeType: 'text/csv')]));
+    } on AppFailure catch (f) {
+      if (mounted) context.toast(f.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _busy
+      ? const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: AppSpinner())
+      : LinkButton(label: 'Export', onPressed: _export);
 }

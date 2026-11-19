@@ -79,6 +79,13 @@ class AllocationRepository {
     );
   }
 
+  /// Lets the server allocate buyers to today's samples and offers, as the
+  /// website's Auto-allocate does. Returns the server's summary.
+  Future<String?> autoAllocate() async {
+    final body = await _api.postBody('/samples-offered-today/auto-allocate-buyers', const {});
+    return J.str(body['message']);
+  }
+
   Future<void> allocate(List<OfferedItem> items, List<int> buyerIds) {
     if (items.length == 1) {
       return _api.post('/samples-offered-today/allocate-buyers', {

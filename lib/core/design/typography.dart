@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Inter on both platforms (bundled in assets/fonts). Selected states change
+/// Montserrat on both platforms (bundled in assets/fonts). Selected states change
 /// colour, never weight or size.
 abstract final class AppText {
-  static const family = 'Inter';
+  static const family = 'Montserrat';
 
   static const largeTitle =
       TextStyle(fontFamily: family, fontSize: 30, fontWeight: FontWeight.w600, letterSpacing: -0.4, height: 1.15);

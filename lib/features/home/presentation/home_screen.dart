@@ -35,7 +35,6 @@ class HomeScreen extends ConsumerWidget {
     final awaiting = ref.watch(awaitingBidsCountProvider);
     final unallocated = ref.watch(unallocatedTodayProvider);
     final recent = ref.watch(recentSamplesProvider);
-    final mismatches = d?.exMismatched ?? 0;
     final unregistered = d?.exUnregistered ?? 0;
     final pendingSales = d?.salesPending ?? 0;
 
@@ -99,23 +98,40 @@ class HomeScreen extends ConsumerWidget {
                 crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
                 mainAxisSpacing: 10,
                 crossAxisSpacing: 10,
-                mainAxisExtent: 84,
+                mainAxisExtent: 88,
               ),
               children: [
                 MetricCard(
                   label: 'Samples today',
                   value: dashCount((d) => d.samplesToday),
                   hint: d?.samplesTotal == null ? null : '${Fmt.number(d!.samplesTotal)} in all',
+                  hue: CardHue.teal,
+                  icon: AppIcons.samples,
                   loading: dash.isLoading,
                   onTap: () => context.goNamed(Routes.samples),
                 ),
-                MetricCard(label: 'Unbatched', value: count(unbatched), loading: unbatched.isLoading, onTap: () => context.pushNamed(Routes.batchAuto)),
-                MetricCard(label: 'Open bids', value: dashCount((d) => d.openBids), loading: dash.isLoading, onTap: () => context.goNamed(Routes.bids)),
+                MetricCard(
+                  label: 'Unbatched',
+                  value: count(unbatched),
+                  hue: CardHue.olive,
+                  icon: AppIcons.batches,
+                  loading: unbatched.isLoading,
+                  onTap: () => context.pushNamed(Routes.batchAuto),
+                ),
+                MetricCard(
+                  label: 'Open bids',
+                  value: dashCount((d) => d.openBids),
+                  hue: CardHue.lavender,
+                  icon: AppIcons.bids,
+                  loading: dash.isLoading,
+                  onTap: () => context.goNamed(Routes.bids),
+                ),
                 MetricCard(
                   label: 'Ex-factory mismatches',
                   value: dashCount((d) => d.exMismatched),
+                  hue: CardHue.clay,
+                  icon: AppIcons.exFactory,
                   loading: dash.isLoading,
-                  valueColor: mismatches > 0 ? c.warning : null,
                   onTap: () => context.pushNamed(Routes.exFactory),
                 ),
               ],
@@ -176,28 +192,25 @@ class _SalesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     final d = dash.value;
     final pending = d?.salesPending;
-    return AppCard(
+    final t = CardHue.mustard.of(Theme.of(context).brightness);
+    return TonalCard(
+      hue: CardHue.mustard,
       onTap: () => context.pushNamed(Routes.sales),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Expanded(child: Text('Sales', style: AppText.footnote.copyWith(color: c.textTertiary))),
-            Text('All time', style: AppText.footnote.copyWith(color: c.textTertiary)),
-          ]),
+          const TonalHeader(hue: CardHue.mustard, label: 'Sales', icon: AppIcons.sales, trailing: 'All time'),
           const SizedBox(height: 4),
           SizedBox(
             height: 30,
             child: dash.isLoading && d == null
                 ? Align(
                     alignment: Alignment.centerLeft,
-                    child: Container(width: 120, height: 20, decoration: BoxDecoration(color: c.fill, borderRadius: BorderRadius.circular(6))),
+                    child: Container(width: 120, height: 20, decoration: BoxDecoration(color: t.tile, borderRadius: BorderRadius.circular(6))),
                   )
-                : FitText(d == null ? '–' : Fmt.money(d.salesAmount), style: AppText.metric),
+                : FitText(d == null ? '–' : Fmt.money(d.salesAmount), style: AppText.metric.copyWith(color: t.ink)),
           ),
           const SizedBox(height: 2),
           Text(
@@ -205,7 +218,7 @@ class _SalesCard extends StatelessWidget {
               Fmt.kg(d?.salesKg),
               if (pending != null) pending == 0 ? 'nothing pending' : '${Fmt.number(pending)} pending approval',
             ].join(' · '),
-            style: AppText.footnote.copyWith(color: pending != null && pending > 0 ? c.warning : c.textSecondary),
+            style: AppText.footnote.copyWith(color: t.inkSoft),
           ),
         ],
       ),
@@ -248,7 +261,7 @@ class _Quick extends StatelessWidget {
                 height: 56,
                 decoration: ShapeDecoration(
                   color: c.surface,
-                  shadows: c.cardShadow,
+                  shadows: c.cardShadow.isEmpty ? null : AppShadow.soft,
                   shape: const RoundedSuperellipseBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
                 ),
                 child: AppIcon(icon, color: c.accent, size: 24),

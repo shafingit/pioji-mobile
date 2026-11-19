@@ -276,6 +276,7 @@ class Segmented<T> extends StatelessWidget {
 /// Opens a month calendar in a sheet. Returns null if dismissed.
 Future<DateTime?> pickDate(BuildContext context, {DateTime? initial, DateTime? minimum}) {
   return showModalBottomSheet<DateTime>(
+    useSafeArea: true,
     context: context,
     isScrollControlled: true,
     builder: (ctx) => SafeArea(child: _CalendarSheet(initial: initial, minimum: minimum)),

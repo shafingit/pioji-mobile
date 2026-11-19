@@ -1,9 +1,12 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../core/list/list_query.dart';
 import '../../../core/list/paged_notifier.dart';
 import '../../../core/network/api.dart';
 import '../../../core/network/dio_provider.dart';
+import '../../../core/network/error_mapper.dart';
 import '../../../core/network/paginated.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/json.dart';
@@ -29,6 +32,60 @@ class SamplesRepository {
   Future<void> park(int id) => _api.post('/samples/$id/park', const <String, Object?>{});
 
   Future<void> unpark(int id) => _api.post('/samples/$id/unpark', const <String, Object?>{});
+
+  /// Sends an evaluated, batched sample for retesting
+  /// (`POST /samples/{id}/transfer`, reason from `sample_transfer_reasons`).
+  /// The server makes a new sample from 10 g of it; returns its message.
+  Future<String?> transfer(int id, String reason) async {
+    final body = await _api.postBody('/samples/$id/transfer', {'transfer_reason': reason});
+    return J.str(body['message']);
+  }
+
+  /// Marks samples (`POST /samples/bulk-mark`) with a mode from
+  /// `form-options` → `sample_bulk_mark_modes` (for tasting, direct
+  /// allocation…). Returns the server's message.
+  Future<String?> bulkMark(List<int> ids, String mode) async {
+    final body = await _api.postBody('/samples/bulk-mark', {'mode': mode, 'sample_ids': ids});
+    return J.str(body['message']);
+  }
+
+  /// Uploads a samples sheet (`POST /samples/bulk-upload`) in one of the
+  /// `form-options` → `sample_upload_formats` layouts.
+  Future<({int created, int processed, List<String> errors})> bulkUpload(String path, String format) async {
+    final data = J.map(await _api.post('/samples/bulk-upload', FormData.fromMap({
+      'format': format,
+      'file': await MultipartFile.fromFile(path, filename: path.split('/').last),
+    }))) ?? const {};
+    return (
+      created: J.integer(data['created']) ?? 0,
+      processed: J.integer(data['total_processed']) ?? 0,
+      errors: [for (final e in (data['errors'] is List ? data['errors'] as List : const [])) e is Map ? (J.str(e['message']) ?? e.toString()) : e.toString()],
+    );
+  }
+
+  /// Applies a marking sheet (`POST /samples/manual-marking`): marking group,
+  /// mark for tasting and direct allocation per sample or offer.
+  Future<String?> manualMarking(String path) async {
+    final body = await _api.postBody('/samples/manual-marking', const {}, file: path);
+    return J.str(body['message']);
+  }
+
+  /// Downloads a sheet template and returns its path: the bulk upload
+  /// template for [format], or the manual-marking one when [format] is null.
+  Future<String> template({String? format}) async {
+    final dir = await getTemporaryDirectory();
+    final path = '${dir.path}/${format == null ? 'manual_marking' : 'samples_$format'}_template.csv';
+    try {
+      await _api.dio.download(
+        format == null ? '/samples/manual-marking/template' : '/samples/bulk-upload/template',
+        path,
+        queryParameters: {'format': ?format},
+      );
+    } on DioException catch (e) {
+      throw mapError(e);
+    }
+    return path;
+  }
 
   /// `GET /reports/tasting`: tasted samples, filtered by `from` / `to` /
   /// `garden_id`.

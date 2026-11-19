@@ -73,6 +73,35 @@ class _OfferedTodayScreenState extends ConsumerState<OfferedTodayScreen> {
     }
   }
 
+  /// The website's Auto-allocate: the server allocates buyers to today's
+  /// samples and offers by their preferences.
+  Future<void> _autoAllocate() async {
+    if (!(ref.read(currentUserProvider)?.can('samples.allocate_buyers') ?? true)) {
+      context.toast("Your role can't allocate buyers.");
+      return;
+    }
+    final ok = await confirm(
+      context,
+      title: 'Auto-allocate buyers?',
+      body: "Buyers are allocated to today's samples and offers by their preferences, as on the website.",
+      action: 'Auto-allocate',
+    );
+    if (!ok || !mounted || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final message = await ref.read(allocationRepositoryProvider).autoAllocate();
+      if (!mounted) return;
+      ref.invalidate(offeredTodayProvider(_date));
+      ref.invalidate(offerListsListProvider);
+      refreshSummaries(ref);
+      context.toast(message ?? 'Buyers allocated');
+    } on AppFailure catch (f) {
+      if (mounted) context.toast(f.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -88,6 +117,7 @@ class _OfferedTodayScreenState extends ConsumerState<OfferedTodayScreen> {
           showBack: true,
           onRefresh: () => ref.refresh(offeredTodayProvider(_date).future),
           actions: [
+            if (!_selecting && DateUtils.isSameDay(_date, DateTime.now())) LinkButton(label: 'Auto', onPressed: _busy ? null : _autoAllocate),
             LinkButton(
               label: _selecting ? 'Done' : 'Select',
               onPressed: () => setState(() {

@@ -81,20 +81,31 @@ class BidRow extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 48),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg - 2, vertical: AppSpace.sm),
-            child: Row(
+            // Two lines: the lot and its status, then the prices, so a long
+            // status label never squeezes out the grade and invoice.
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: OneLineText('${b.grade} · ${b.invoiceNumber}',
-                      style: AppText.callout.copyWith(fontWeight: FontWeight.w500, color: c.textPrimary)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OneLineText('${b.grade} · ${b.invoiceNumber}',
+                          style: AppText.callout.copyWith(fontWeight: FontWeight.w500, color: c.textPrimary)),
+                    ),
+                    const SizedBox(width: AppSpace.sm),
+                    OptionBadge(list: 'bid_statuses', value: b.status, short: true),
+                  ],
                 ),
-                const SizedBox(width: AppSpace.sm),
-                Text('Ask ', style: figures.copyWith(color: c.textTertiary)),
-                Text(_price(b.incoming), style: figures.copyWith(color: c.textPrimary)),
-                const SizedBox(width: AppSpace.md),
-                Text('Max ', style: figures.copyWith(color: c.textTertiary)),
-                Text(_price(b.maxBid), style: figures.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
-                const SizedBox(width: AppSpace.md),
-                OptionBadge(list: 'bid_statuses', value: b.status),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Text('Ask ', style: figures.copyWith(color: c.textTertiary)),
+                    Text(_price(b.incoming), style: figures.copyWith(color: c.textPrimary)),
+                    const SizedBox(width: AppSpace.md),
+                    Text('Max ', style: figures.copyWith(color: c.textTertiary)),
+                    Text(_price(b.maxBid), style: figures.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
+                  ],
+                ),
               ],
             ),
           ),

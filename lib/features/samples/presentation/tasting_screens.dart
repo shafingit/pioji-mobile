@@ -16,6 +16,10 @@ import '../../../core/widgets/form_submit.dart';
 import '../../../core/widgets/scaffolds.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/design/app_icons.dart';
+import '../../../core/errors/app_failure.dart';
+import '../../../core/utils/json.dart';
+import '../../../core/widgets/sheets.dart';
+import '../../masters/data/form_options.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/samples_repository.dart';
 import '../domain/sample.dart';
@@ -129,7 +133,68 @@ class SampleTastingSection extends ConsumerStatefulWidget {
 
 class _SampleTastingSectionState extends ConsumerState<SampleTastingSection> {
   late bool _parked = widget.sample.isParked;
+  late bool _forTasting = J.boolOr(widget.sample.raw['mark_for_tasting'], false);
+  late bool _direct = J.boolOr(widget.sample.raw['direct_allocation'], false);
   bool _busy = false;
+
+  Future<void> _run(Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+    } on AppFailure catch (f) {
+      if (mounted) context.toast(f.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// `POST /samples/bulk-mark` with a mode the user picks from
+  /// `form-options` → `sample_bulk_mark_modes`.
+  Future<void> _mark() async {
+    final options = await ref.read(formOptionsProvider.future);
+    if (!mounted) return;
+    final mode = await showPickerSheet<String>(
+      context,
+      title: 'Mark sample',
+      searchable: false,
+      options: [for (final m in options['sample_bulk_mark_modes']) PickOption(m.value, m.label)],
+    );
+    if (mode == null || !mounted) return;
+    await _run(() async {
+      final message = await ref.read(samplesRepositoryProvider).bulkMark([widget.sample.id], mode);
+      final fresh = await ref.read(samplesRepositoryProvider).get(widget.sample.id);
+      if (!mounted) return;
+      setState(() {
+        _forTasting = J.boolOr(fresh.raw['mark_for_tasting'], false);
+        _direct = J.boolOr(fresh.raw['direct_allocation'], false);
+      });
+      ref.invalidate(samplesListProvider);
+      refreshSummaries(ref);
+      context.toast(message ?? 'Sample marked');
+    });
+  }
+
+  /// Sends a tasted, batched sample for retesting with a reason from
+  /// `form-options` → `sample_transfer_reasons`; the server makes a new
+  /// sample from 10 g of it.
+  Future<void> _retest() async {
+    final options = await ref.read(formOptionsProvider.future);
+    if (!mounted) return;
+    final reason = await showPickerSheet<String>(
+      context,
+      title: 'Reason for retesting',
+      searchable: false,
+      options: [for (final r in options['sample_transfer_reasons']) PickOption(r.value, r.label)],
+    );
+    if (reason == null || !mounted) return;
+    await _run(() async {
+      final message = await ref.read(samplesRepositoryProvider).transfer(widget.sample.id, reason);
+      ref.invalidate(samplesListProvider);
+      refreshSummaries(ref);
+      if (mounted) context.toast(message ?? 'Sent for retesting');
+    });
+  }
 
   Future<void> _togglePark() async {
     setState(() => _busy = true);
@@ -205,6 +270,25 @@ class _SampleTastingSectionState extends ConsumerState<SampleTastingSection> {
           trailing: _busy ? const AppSpinner(size: 18) : (_parked ? Text('Parked', style: AppText.footnote.copyWith(color: c.warning)) : null),
           onTap: _busy ? null : _togglePark,
         ),
+        AppListRow(
+          title: 'Mark sample',
+          titleStyle: AppText.body,
+          minHeight: 48,
+          trailing: Text(
+            [if (_forTasting) 'For tasting', if (_direct) 'Direct allocation'].join(' · '),
+            style: AppText.footnote.copyWith(color: c.success),
+          ),
+          showChevron: true,
+          onTap: _busy ? null : _mark,
+        ),
+        if (s.isTasted && s.batchRef != null)
+          AppListRow(
+            title: 'Send for retesting',
+            titleStyle: AppText.body,
+            minHeight: 48,
+            showChevron: true,
+            onTap: _busy ? null : _retest,
+          ),
       ],
     );
   }
