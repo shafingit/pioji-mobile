@@ -57,10 +57,25 @@ class ServerFailure extends AppFailure {
   const ServerFailure([this.status, this.serverMessage]);
   final int? status;
 
-  /// The server's own message. Not shown as is: on 500s it can contain SQL.
+  /// The server's own message. On 500s it can contain SQL or a stack trace,
+  /// so it is shown only when it reads as a plain sentence.
   final String? serverMessage;
   @override
-  String get message => 'Something went wrong on our side. Try again.';
+  String get message => plainServerMessage(serverMessage) ?? 'Something went wrong on our side. Try again.';
+}
+
+final _technical = RegExp(
+  r'sql|select |insert |update |delete from|database|exception|error:|stack|trace|\.php|::|->|undefined|call to|null|column|table|syntax|\{|\}|\\',
+  caseSensitive: false,
+);
+
+/// [m] when it is a short, plain sentence meant for people (such as "No
+/// unbatched samples found for 2026-11-20"), otherwise null.
+String? plainServerMessage(String? m) {
+  final t = m?.trim();
+  if (t == null || t.isEmpty || t.length > 160 || t.contains('\n')) return null;
+  if (t.toLowerCase() == 'server error' || _technical.hasMatch(t)) return null;
+  return t;
 }
 
 class UnknownFailure extends AppFailure {

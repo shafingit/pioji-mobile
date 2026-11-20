@@ -92,7 +92,14 @@ class BatchesRepository {
   Future<List<Sample>> unbatched(DateTime date) async {
     final data = await _api.getData('/batches/unbatched-samples', query: {'date': Fmt.api(date)});
     final node = data is Map<String, dynamic> ? (data['samples'] ?? data['data']) : data;
-    return (node is List ? node : const []).whereType<Map<String, dynamic>>().map(Sample.fromJson).toList();
+    // The list ignores `date` and returns every unbatched sample, while
+    // `create-for-date` batches only the samples that arrived that day.
+    bool sameDay(Map<String, dynamic> s) {
+      final d = J.date(s['arrival_date']);
+      return d == null || (d.year == date.year && d.month == date.month && d.day == date.day);
+    }
+
+    return (node is List ? node : const []).whereType<Map<String, dynamic>>().where(sameDay).map(Sample.fromJson).toList();
   }
 }
 
