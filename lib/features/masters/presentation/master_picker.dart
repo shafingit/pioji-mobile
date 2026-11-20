@@ -749,6 +749,13 @@ class _PartySheetState extends ConsumerState<_PartySheet> {
     final matches = q.isEmpty ? all : all.where((b) => b.name.toLowerCase().contains(q.toLowerCase())).toList();
     final exact = all.any((b) => b.name.toLowerCase() == q.toLowerCase());
     final hasCurrent = widget.current != null && widget.current!.isNotEmpty;
+    // Clears the party; sits beside the Buyers heading, styled like the
+    // other heading actions ("Remove" on contract items).
+    final clear = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => Navigator.pop(context, ''),
+      child: Text('Clear', style: AppText.footnote.copyWith(color: c.danger)),
+    );
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.8,
@@ -766,32 +773,32 @@ class _PartySheetState extends ConsumerState<_PartySheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (q.isNotEmpty && !exact || hasCurrent)
+                      if (q.isNotEmpty && !exact)
                         GroupedSection(
                           children: [
-                            if (q.isNotEmpty && !exact)
-                              AppListRow(
-                                title: 'Use “$q”',
-                                subtitle: 'Not in the buyers list',
-                                minHeight: 48,
-                                titleStyle: AppText.body.copyWith(color: c.accent),
-                                leading: AppIcon(AppIcons.edit, color: c.accent, size: 20),
-                                onTap: () => Navigator.pop(context, q),
-                              ),
-                            if (hasCurrent)
-                              AppListRow(
-                                title: 'Clear',
-                                minHeight: 48,
-                                titleStyle: AppText.body.copyWith(color: c.danger),
-                                onTap: () => Navigator.pop(context, ''),
-                              ),
+                            AppListRow(
+                              title: 'Use “$q”',
+                              subtitle: 'Not in the buyers list',
+                              minHeight: 48,
+                              titleStyle: AppText.body.copyWith(color: c.accent),
+                              leading: AppIcon(AppIcons.edit, color: c.accent, size: 20),
+                              onTap: () => Navigator.pop(context, q),
+                            ),
                           ],
+                        ),
+                      if (q.isNotEmpty && !exact && (matches.isNotEmpty || buyers.isLoading)) const SizedBox(height: AppSpace.xl),
+                      // With no buyer list to sit beside, Clear gets its own row.
+                      if (hasCurrent && matches.isEmpty && !buyers.isLoading)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpace.xs, vertical: AppSpace.md),
+                          child: Align(alignment: Alignment.centerLeft, child: clear),
                         ),
                       if (buyers.isLoading && all.isEmpty)
                         const Padding(padding: EdgeInsets.all(AppSpace.xl), child: Center(child: AppSpinner()))
                       else if (matches.isNotEmpty)
                         GroupedSection(
                           label: 'Buyers',
+                          trailingLabel: hasCurrent ? clear : null,
                           children: [
                             for (final b in matches)
                               AppListRow(
