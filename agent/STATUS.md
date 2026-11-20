@@ -75,6 +75,10 @@ The 10 client-feedback requests (12 Nov 2026) were all built by 17 Nov 2026 and 
 3. Sample 28 (SMP2026080002) was marked tasted by an accidental empty `POST /samples/28/tasting` on 17 Nov 2026 (`evaluated_at` / `evaluated_by` changed; scores were already there). Restore its previous evaluation fields from the server logs.
 4. Not testable as super admin: that `POST`/`PUT /samples` refuses a non-today arrival date without `samples.edit_arrival_date`.
 5. Fixed 18 Nov: `party` comes back as `{id, buyer_name, code}`.
+6. Branches (20 Nov 2026). The website lists only the selected branch's records (Switch Branch), but the API saves app records with `branch_id = null`, so they appear in no branch on the website. The app's Home has a branch switch (`form-options` → `offices`) and already sends the choice as `branch_id` (body of every create, including form uploads such as courier photos and sample bulk upload, but not users, buyers or sellers; query of every list read) and an `X-Branch-Id` header. The API needs to:
+   - save `branch_id` on create for every module (offer lists, samples, batches, bid book, courier, contracts, sales register, ex-factory), the same way the website saves the session branch;
+   - filter list and dashboard reads by `branch_id` when it is sent, the same way the website filters by the selected branch (no `branch_id` = all branches);
+   - set a branch on records already saved without one, e.g. offer list 5281.
 
 ## Not built yet (from the spec)
 

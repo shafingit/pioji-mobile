@@ -16,6 +16,8 @@ import '../../../core/widgets/scaffolds.dart';
 import '../../sales_register/data/sales_repository.dart';
 import '../../samples/presentation/samples_list_screen.dart';
 import '../application/home_providers.dart';
+import '../../../core/widgets/logo.dart';
+import 'branch_switcher.dart';
 import '../../../core/design/app_icons.dart';
 import '../../../core/widgets/controls.dart';
 import '../../auth/application/auth_controller.dart';
@@ -82,7 +84,21 @@ class HomeScreen extends ConsumerWidget {
 
     return PageScaffold(
       title: 'Today',
-      caption: Fmt.longDay(DateTime.now()),
+      titleWidget: const AppLogo(size: 28),
+      actions: const [BranchSwitcher()],
+      header: [
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpace.sm, bottom: AppSpace.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Today', style: AppText.largeTitle.copyWith(color: c.textPrimary)),
+              const SizedBox(height: 2),
+              Text(Fmt.longDay(DateTime.now()), style: AppText.footnote.copyWith(color: c.textTertiary)),
+            ],
+          ),
+        ),
+      ],
       onRefresh: () async {
         refreshHome(ref);
         await ref.read(dashboardProvider.future).catchError((_) => const DashboardSummary());

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/env.dart';
 import '../errors/app_failure.dart';
+import '../storage/current_branch.dart';
 import '../storage/secure_store.dart';
 import 'api.dart';
 
@@ -37,6 +38,19 @@ class _ApiInterceptor extends Interceptor {
   Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
     final token = await _ref.read(secureStoreProvider).readToken();
     if (token != null) options.headers['Authorization'] = 'Bearer $token';
+    final branch = _ref.read(currentBranchProvider);
+    if (branch != null) {
+      applyBranch(
+        method: options.method,
+        path: options.path,
+        query: options.queryParameters,
+        headers: options.headers,
+        body: options.data,
+        branchId: branch,
+        setQuery: (q) => options.queryParameters = q,
+        setBody: (b) => options.data = b,
+      );
+    }
     handler.next(options);
   }
 

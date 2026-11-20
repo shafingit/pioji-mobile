@@ -17,12 +17,16 @@ const kTabBarReserve = 24.0;
 /// Fixed 56 px top bar: optional back or close button, title (with an
 /// optional caption under it) and actions on the right.
 class AppTopBar extends StatelessWidget {
-  const AppTopBar({super.key, required this.title, this.caption, this.leading, this.actions = const []});
+  const AppTopBar({super.key, required this.title, this.caption, this.leading, this.actions = const [], this.titleWidget});
 
   final String title;
   final String? caption;
   final Widget? leading;
   final List<Widget> actions;
+
+  /// Shown in place of [title] and [caption] (Home's logo and branch
+  /// switcher); [title] stays the page's name.
+  final Widget? titleWidget;
 
   @override
   Widget build(BuildContext context) {
@@ -34,19 +38,22 @@ class AppTopBar extends StatelessWidget {
         child: Row(
           children: [
             ?leading,
-            Expanded(
-              child: Semantics(
-                header: true,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    OneLineText(title, style: (leading == null ? AppText.title : AppText.headline).copyWith(color: c.textPrimary)),
-                    if (caption != null) OneLineText(caption!, style: AppText.footnote.copyWith(color: c.textTertiary)),
-                  ],
+            if (titleWidget != null)
+              Expanded(child: Align(alignment: Alignment.centerLeft, child: titleWidget))
+            else
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      OneLineText(title, style: (leading == null ? AppText.title : AppText.headline).copyWith(color: c.textPrimary)),
+                      if (caption != null) OneLineText(caption!, style: AppText.footnote.copyWith(color: c.textTertiary)),
+                    ],
+                  ),
                 ),
               ),
-            ),
             ...actions,
           ],
         ),
@@ -97,6 +104,7 @@ class PageScaffold extends StatelessWidget {
     this.controller,
     this.showBack = false,
     this.inTabs = true,
+    this.titleWidget,
   });
 
   final String title;
@@ -109,6 +117,9 @@ class PageScaffold extends StatelessWidget {
   final bool showBack;
   final bool inTabs;
 
+  /// Replaces the title in the top bar (see [AppTopBar.titleWidget]).
+  final Widget? titleWidget;
+
   @override
   Widget build(BuildContext context) {
     final canPop = showBack || GoRouter.of(context).canPop();
@@ -118,15 +129,13 @@ class PageScaffold extends StatelessWidget {
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(AppSpace.screenH, AppSpace.xs, AppSpace.screenH, 0),
-          sliver: SliverList.list(
-            children: [
-              const OfflineBanner(),
-              ...header,
-            ],
-          ),
+          sliver: SliverList.list(children: [const OfflineBanner(), ...header]),
         ),
         for (final s in slivers)
-          SliverPadding(padding: const EdgeInsets.symmetric(horizontal: AppSpace.screenH), sliver: s),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.screenH),
+            sliver: s,
+          ),
         SliverToBoxAdapter(child: SizedBox(height: inTabs ? kTabBarReserve : AppSpace.xxxl)),
       ],
     );
@@ -137,7 +146,7 @@ class PageScaffold extends StatelessWidget {
         bottom: false,
         child: Column(
           children: [
-            AppTopBar(title: title, caption: caption, leading: canPop ? const BackLink() : null, actions: actions),
+            AppTopBar(title: title, caption: caption, leading: canPop ? const BackLink() : null, actions: actions, titleWidget: titleWidget),
             Expanded(child: scroll),
           ],
         ),
@@ -152,8 +161,7 @@ class BackLink extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) =>
-      TopBarIcon(icon: AppIcons.chevronLeft, semanticLabel: label, onPressed: () => context.pop());
+  Widget build(BuildContext context) => TopBarIcon(icon: AppIcons.chevronLeft, semanticLabel: label, onPressed: () => context.pop());
 }
 
 /// Full-screen form above the tab bar: close / title / optional trailing,
@@ -202,10 +210,7 @@ class FormScaffold extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(AppSpace.screenH, AppSpace.xs, AppSpace.screenH, AppSpace.xl),
                   children: [
                     const OfflineBanner(),
-                    for (var i = 0; i < children.length; i++) ...[
-                      if (i > 0) const SizedBox(height: AppSpace.lg + 2),
-                      children[i],
-                    ],
+                    for (var i = 0; i < children.length; i++) ...[if (i > 0) const SizedBox(height: AppSpace.lg + 2), children[i]],
                   ],
                 ),
               ),
