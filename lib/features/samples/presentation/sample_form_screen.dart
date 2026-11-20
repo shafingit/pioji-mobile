@@ -22,6 +22,9 @@ import '../../masters/presentation/master_picker.dart';
 import '../data/samples_repository.dart';
 import '../domain/sample.dart';
 import '../../../core/widgets/extra_fields.dart';
+import '../../../core/design/app_icons.dart';
+import '../../../core/widgets/buttons.dart';
+import '../../../core/storage/prefs.dart';
 
 
 /// Website form fields the API saves (dropdowns load from their own APIs).
@@ -62,6 +65,20 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
   late final _nett = TextEditingController(text: Fmt.editable(_e?.weight));
   late final _total = TextEditingController(text: Fmt.editable(_e?.totalKgs));
   late final _remarks = TextEditingController(text: _e?.remarks);
+
+  late final _last = ref.read(lastUsedProvider('sample'));
+
+  @override
+  void initState() {
+    super.initState();
+    if (_e == null) {
+      // Start from the user's last sample.
+      _type = _last['sample_type'];
+      _forCompany = _last['for_company'];
+      final partyId = int.tryParse(_last['party_id'] ?? '');
+      if (partyId != null) _party = MasterItem(partyId, _last['party_name'] ?? '#$partyId');
+    }
+  }
 
   @override
   void dispose() {
@@ -146,7 +163,9 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
     return ok;
   }
 
-  Future<void> _save() async {
+  /// [another]: keep the date, garden, prefix and details and clear the
+  /// lot, ready for the next sample from the same garden.
+  Future<void> _save({bool another = false}) async {
     if (_e == null && !await _checkDuplicates()) return;
     if (!mounted) return;
     final repo = ref.read(samplesRepositoryProvider);
@@ -180,13 +199,35 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
     if (ok == true && mounted) {
       ref.invalidate(samplesListProvider);
       refreshSummaries(ref);
-      context.toast(_e == null ? 'Sample saved' : 'Sample updated');
-      // After an edit, go back to the list so the detail isn't stale.
-      if (_e == null) {
-        context.pop();
-      } else {
+      if (_e != null) {
+        context.toast('Sample updated');
+        // After an edit, go back to the list so the detail isn't stale.
         context.goNamed(Routes.samples);
+        return;
       }
+      await _last.save({
+        'sample_type': _type,
+        'for_company': _forCompany,
+        'party_id': _party?.id,
+        'party_name': _party?.name,
+      });
+      if (!mounted) return;
+      if (!another) {
+        context.toast('Sample saved');
+        context.pop();
+        return;
+      }
+      setState(() {
+        _grade = null;
+        _parentId = null;
+        for (final c in [_inv, _pkgs, _nett, _total, _remarks]) {
+          c.clear();
+        }
+        _x.text['gross_weight']!.clear();
+        _x.dates['d_o_packing'] = null;
+        _x.flags['requests_purchased_sample'] = false;
+      });
+      context.toast('Sample saved. Enter the next one.');
     }
   }
 
@@ -220,11 +261,13 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
               onTypeChanged: (t) => setState(() => _lotType = t),
               onGradeChanged: (g) => setState(() => _grade = g),
               prefixError: err('invoice_prefix'),
+              needsGarden: true,
             ),
             GradePickerRow(
               gardenId: _garden?.id,
               prefix: _prefix.text,
               invoiceType: _lotType,
+              needsGarden: true,
               value: _grade,
               onChanged: (g) => setState(() => _grade = g),
               error: err('grade'),
@@ -252,7 +295,7 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
                 ],
               ),
             ),
-            OptionRow(label: 'For', list: 'offer_for', value: _forCompany, placeholder: 'Not set', error: err('for_company'), onChanged: (v) => setState(() => _forCompany = v)),
+            OptionChipsRow(label: 'For', list: 'offer_for', value: _forCompany, error: err('for_company'), onChanged: (v) => setState(() => _forCompany = v)),
             MasterPickerRow(
               label: 'Party (outgoing)',
               placeholder: 'None',
@@ -265,6 +308,12 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
             FieldInput(label: 'Remarks', hint: 'Clean liquor sample', controller: _remarks, maxLines: 3, error: err('remarks')),
           ],
         ),
+        if (_e == null)
+          SecondaryButton(
+            label: 'Save and add another',
+            icon: AppIcons.add,
+            onPressed: submitting ? null : () => _save(another: true),
+          ),
       ],
     );
   }

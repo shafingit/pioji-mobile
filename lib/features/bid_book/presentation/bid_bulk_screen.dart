@@ -18,10 +18,15 @@ import '../../../core/widgets/states.dart';
 import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/bid_book_repository.dart';
+import '../../../core/utils/json.dart';
 
 class _LotDraft {
   String? grade;
   final invoice = TextEditingController();
+  final invoiceFocus = FocusNode();
+
+  /// Garden and invoice last looked up in the offer list.
+  String? lookedUp;
   final pkgs = TextEditingController();
   final incoming = TextEditingController();
   final maxBid = TextEditingController();
@@ -30,6 +35,7 @@ class _LotDraft {
   bool get isBlank => grade == null && [invoice, pkgs, incoming, maxBid].every((c) => c.text.trim().isEmpty);
 
   void dispose() {
+    invoiceFocus.dispose();
     for (final c in [invoice, pkgs, incoming, maxBid]) {
       c.dispose();
     }
@@ -51,7 +57,32 @@ class _BidBulkScreenState extends ConsumerState<BidBulkScreen> with FormSubmit {
 
   // Add lots
   MasterItem? _garden;
-  final _lots = <_LotDraft>[_LotDraft(), _LotDraft(), _LotDraft()];
+  late final _lots = <_LotDraft>[_newLot(), _newLot(), _newLot()];
+
+  /// A lot row that fills grade, packages and asking price from the offer
+  /// list once its invoice is entered.
+  _LotDraft _newLot() {
+    final lot = _LotDraft();
+    lot.invoiceFocus.addListener(() {
+      if (!lot.invoiceFocus.hasFocus) _fillLot(lot);
+    });
+    return lot;
+  }
+
+  Future<void> _fillLot(_LotDraft lot) async {
+    final garden = _garden?.name, inv = lot.invoice.text.trim();
+    if (garden == null || garden.startsWith('#') || inv.isEmpty) return;
+    final key = '$garden|$inv'.toUpperCase();
+    if (key == lot.lookedUp) return;
+    lot.lookedUp = key;
+    final found = await ref.read(bidBookRepositoryProvider).searchOfferList(garden, inv);
+    if (found == null || !mounted || !_lots.contains(lot)) return;
+    setState(() {
+      lot.grade ??= J.str(found['grade']) ?? J.str(found['tea_grade']);
+      if (lot.pkgs.text.trim().isEmpty && J.integer(found['packages']) != null) lot.pkgs.text = '${J.integer(found['packages'])}';
+      if (lot.incoming.text.trim().isEmpty && J.dbl(found['price']) != null) lot.incoming.text = Fmt.editable(J.dbl(found['price']));
+    });
+  }
 
   // Set prices
   late Future<List<Bid>> _open = ref.read(bidBookRepositoryProvider).listForPicking('open');
@@ -118,7 +149,7 @@ class _BidBulkScreenState extends ConsumerState<BidBulkScreen> with FormSubmit {
       _lots
         ..clear()
         ..addAll(keep);
-      if (_lots.isEmpty) _lots.add(_LotDraft());
+      if (_lots.isEmpty) _lots.add(_newLot());
       _open = ref.read(bidBookRepositoryProvider).listForPicking('open');
     });
     final made = result.created.length;
@@ -190,9 +221,17 @@ class _BidBulkScreenState extends ConsumerState<BidBulkScreen> with FormSubmit {
               : null,
           footer: _lots[i].error == null ? null : Text(_lots[i].error!, style: AppText.footnote.copyWith(color: c.danger)),
           children: [
-            GradePickerRow(gardenId: _garden?.id, value: _lots[i].grade, onChanged: (g) => setState(() => _lots[i].grade = g)),
+            GradePickerRow(gardenId: _garden?.id, needsGarden: true, value: _lots[i].grade, onChanged: (g) => setState(() => _lots[i].grade = g)),
             Row(children: [
-              Expanded(child: FieldInput(label: 'Invoice', hint: '1045', controller: _lots[i].invoice)),
+              Expanded(
+                child: FieldInput(
+                  label: 'Invoice',
+                  hint: '1045',
+                  controller: _lots[i].invoice,
+                  focusNode: _lots[i].invoiceFocus,
+                  onSubmitted: (_) => _fillLot(_lots[i]),
+                ),
+              ),
               SizedBox(width: 120, child: FieldInput(label: 'Packages', hint: '20', controller: _lots[i].pkgs, keyboardType: TextInputType.number, inputFormatters: digitsOnly)),
             ]),
             Row(children: [
@@ -201,7 +240,7 @@ class _BidBulkScreenState extends ConsumerState<BidBulkScreen> with FormSubmit {
             ]),
           ],
         ),
-      SecondaryButton(label: 'Add another lot', icon: AppIcons.add, onPressed: () => setState(() => _lots.add(_LotDraft()))),
+      SecondaryButton(label: 'Add another lot', icon: AppIcons.add, onPressed: () => setState(() => _lots.add(_newLot()))),
     ];
   }
 

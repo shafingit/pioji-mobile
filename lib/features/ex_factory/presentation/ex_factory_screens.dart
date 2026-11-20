@@ -188,16 +188,34 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
 
   bool _looking = false;
 
+  /// Mark and invoice last looked up; leaving the invoice field looks the
+  /// lot up by itself (new entries only).
+  String? _lookedUp;
+  final _invFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    if (_e == null) {
+      _invFocus.addListener(() {
+        if (!_invFocus.hasFocus) _lookupLot(auto: true);
+      });
+    }
+  }
+
   /// Fills the bill from the lot's sales register entry, by mark and
   /// invoice (`GET /ex-factory/lookup-lot`), like the website.
-  Future<void> _lookupLot() async {
-    if (_looking) return;
+  Future<void> _lookupLot({bool auto = false}) async {
+    final key = '${_mark.text.trim()}|${_inv.text.trim()}'.toUpperCase();
+    if (_looking || _mark.text.trim().isEmpty || _inv.text.trim().isEmpty) return;
+    if (auto && key == _lookedUp) return;
+    _lookedUp = key;
     setState(() => _looking = true);
     final lot = await ref.read(exFactoryRepositoryProvider).lookupLot(_mark.text.trim(), _inv.text.trim());
     if (!mounted) return;
     setState(() => _looking = false);
     if (lot == null) {
-      context.toast('No lot found for this mark and invoice.');
+      if (!auto) context.toast('No lot found for this mark and invoice.');
       return;
     }
     setState(() {
@@ -217,6 +235,7 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
 
   @override
   void dispose() {
+    _invFocus.dispose();
     _x.dispose();
     for (final c in [_mark, _prefix, _inv, _pkgs, _nett, _taxable, _igstAmt, _cgstAmt, _sgstAmt, _total, _cn, _transport, _credit]) {
       c.dispose();
@@ -320,12 +339,22 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
             FieldInput(label: 'Mark', hint: 'Assam Valley Mark', controller: _mark, error: err('mark'), onChanged: (_) => setState(() {})),
             Row(children: [
               SizedBox(width: 120, child: FieldInput(label: 'Prefix', hint: 'IVP', controller: _prefix, textCapitalization: TextCapitalization.characters)),
-              Expanded(child: FieldInput(label: 'Invoice no', hint: '9812', controller: _inv, error: err('invoice_no'), onChanged: (_) => setState(() {}))),
+              Expanded(
+                child: FieldInput(
+                  label: 'Invoice no',
+                  hint: '9812',
+                  controller: _inv,
+                  focusNode: _invFocus,
+                  error: err('invoice_no'),
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _lookupLot(auto: true),
+                ),
+              ),
             ]),
             LookupButton(
               label: 'Fill from sales register',
               busy: _looking,
-              onPressed: _mark.text.trim().isEmpty || _inv.text.trim().isEmpty ? null : _lookupLot,
+              onPressed: _mark.text.trim().isEmpty || _inv.text.trim().isEmpty ? null : () => _lookupLot(),
             ),
           ],
         ),
@@ -377,7 +406,7 @@ class _ExFactoryFormScreenState extends ConsumerState<ExFactoryFormScreen> with 
           label: 'Dispatch',
           children: [
             FieldInput(label: 'CN number', hint: 'CN-44129', controller: _cn),
-            DateRow(label: 'CN date', value: _cnDate, onChanged: (d) => setState(() => _cnDate = d)),
+            DateRow(label: 'CN date', value: _cnDate, placeholder: 'Not set', todayShortcut: true, onChanged: (d) => setState(() => _cnDate = d)),
             FieldInput(label: 'Transport', hint: 'V-Trans Logistics', controller: _transport),
             FieldInput(label: 'Credit days', hint: '15', controller: _credit, keyboardType: TextInputType.number, inputFormatters: digitsOnly, textInputAction: TextInputAction.done),
           ],

@@ -28,6 +28,7 @@ import '../../masters/presentation/master_picker.dart';
 import '../data/courier_repository.dart';
 import '../../../core/design/app_icons.dart';
 import '../../../core/application/fresh_read.dart';
+import '../../../core/storage/prefs.dart';
 
 
 class CourierListScreen extends ConsumerWidget {
@@ -87,13 +88,21 @@ class _CourierFormScreenState extends ConsumerState<CourierFormScreen> with Form
       ? null
       : MasterItem(_e!.courierAddressId!, _e.destinationAddress ?? '#${_e.courierAddressId}');
   late MasterItem? _service = _e?.courierServiceId == null
-      ? null
+      ? _lastService()
       : MasterItem(_e!.courierServiceId!, _e.courierName ?? '#${_e.courierServiceId}');
+  late final _last = ref.read(lastUsedProvider('courier'));
+
+  /// A new entry starts with the courier service of the user's last one.
+  MasterItem? _lastService() {
+    if (_e != null) return null;
+    final id = int.tryParse(_last['service_id'] ?? '');
+    return id == null ? null : MasterItem(id, _last['service_name'] ?? '#$id');
+  }
   String? _phone;
   late DateTime _pickup = _e?.pickupDate ?? DateTime.now();
   late String _day = _e?.pickupDay ?? Fmt.weekday(_pickup);
-  late bool _auc = _e?.isAuc ?? false;
-  late bool _pvt = _e?.isPvt ?? false;
+  late bool _auc = _e?.isAuc ?? _last['auc'] == 'true';
+  late bool _pvt = _e?.isPvt ?? _last['pvt'] == 'true';
   String? _photo;
   late Set<int> _postingIds = {...?_e?.postingListIds};
   late final _addressText = TextEditingController(text: _e?.destinationAddress);
@@ -215,6 +224,10 @@ class _CourierFormScreenState extends ConsumerState<CourierFormScreen> with Form
     if (ok == true && mounted) {
       ref.invalidate(courierListProvider);
       refreshSummaries(ref);
+      if (_e == null) {
+        await _last.save({'service_id': _service?.id, 'service_name': _service?.name, 'auc': _auc, 'pvt': _pvt});
+        if (!mounted) return;
+      }
       context.toast(_e == null ? 'Courier entry saved' : 'Courier entry updated');
       if (_e == null) {
         context.pop();

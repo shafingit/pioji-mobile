@@ -26,6 +26,7 @@ import '../../masters/presentation/master_picker.dart';
 import '../data/bid_book_repository.dart';
 import '../../../core/design/app_icons.dart';
 import '../../../core/widgets/extra_fields.dart';
+import '../../../core/storage/prefs.dart';
 
 class BidBookScreen extends ConsumerWidget {
   const BidBookScreen({super.key});
@@ -149,29 +150,64 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
 
   bool _looking = false;
 
+  /// The garden and invoice last looked up, so leaving the field again
+  /// doesn't repeat it.
+  String? _lookedUp;
+  final _gardenFocus = FocusNode();
+  final _invoiceFocus = FocusNode();
+  late final _last = ref.read(lastUsedProvider('bid'));
+
+  @override
+  void initState() {
+    super.initState();
+    if (_e == null) {
+      // Start from the user's last lot; look the lot up once garden and
+      // invoice are both in.
+      final id = int.tryParse(_last['negotiator_id'] ?? '');
+      if (id != null) _negotiator = MasterItem(id, _last['negotiator_name'] ?? '#$id');
+      for (final f in [_gardenFocus, _invoiceFocus]) {
+        f.addListener(() {
+          if (!f.hasFocus) _lookupOffer(auto: true);
+        });
+      }
+    }
+  }
+
   /// Fills grade, packages, weight and price from the offer list
-  /// (`GET /bid-book/search-offer-list`), like the website.
-  Future<void> _lookupOffer() async {
-    if (_looking) return;
+  /// (`GET /bid-book/search-offer-list`), like the website. [auto] (after
+  /// typing garden and invoice) fills only empty fields and stays quiet when
+  /// nothing matches.
+  Future<void> _lookupOffer({bool auto = false}) async {
+    final garden = _garden.text.trim(), inv = _invoice.text.trim();
+    if (_looking || garden.isEmpty || inv.isEmpty) return;
+    final key = '$garden|$inv'.toUpperCase();
+    if (auto && key == _lookedUp) return;
+    _lookedUp = key;
     setState(() => _looking = true);
-    final lot = await ref.read(bidBookRepositoryProvider).searchOfferList(_garden.text.trim(), _invoice.text.trim());
+    final lot = await ref.read(bidBookRepositoryProvider).searchOfferList(garden, inv);
     if (!mounted) return;
     setState(() => _looking = false);
     if (lot == null) {
-      context.toast('No offer found for this garden and invoice.');
+      if (!auto) context.toast('No offer found for this garden and invoice.');
       return;
     }
+    void put(TextEditingController c, String? v) {
+      if (v != null && (!auto || c.text.trim().isEmpty)) c.text = v;
+    }
     setState(() {
-      if (J.str(lot['grade']) ?? J.str(lot['tea_grade']) case final v?) _grade = v;
-      if (J.integer(lot['packages']) case final v?) _pkgs.text = '$v';
-      if (J.dbl(lot['net_weight']) case final v?) _net.text = Fmt.editable(v);
-      if (J.dbl(lot['price']) case final v?) _incoming.text = Fmt.editable(v);
+      final grade = J.str(lot['grade']) ?? J.str(lot['tea_grade']);
+      if (grade != null && (!auto || _grade == null)) _grade = grade;
+      put(_pkgs, J.integer(lot['packages'])?.toString());
+      put(_net, J.dbl(lot['net_weight']) == null ? null : Fmt.editable(J.dbl(lot['net_weight'])));
+      put(_incoming, J.dbl(lot['price']) == null ? null : Fmt.editable(J.dbl(lot['price'])));
     });
     context.toast('Filled from the offer list');
   }
 
   @override
   void dispose() {
+    _gardenFocus.dispose();
+    _invoiceFocus.dispose();
     _x.dispose();
     for (final c in [_garden, _invoice, _pkgs, _net, _incoming, _max, _neg, _pencil, _remarks]) {
       c.dispose();
@@ -179,7 +215,8 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
     super.dispose();
   }
 
-  Future<void> _save() async {
+  /// [another]: keep the garden, status and negotiator and clear the lot.
+  Future<void> _save({bool another = false}) async {
     final body = <String, Object?>{
       ..._x.body(),
       'garden_name': _garden.text.trim(),
@@ -217,8 +254,26 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
     if (ok == true && mounted) {
       ref.invalidate(bidBookListProvider);
       refreshSummaries(ref);
-      context.toast(_e == null ? 'Lot saved' : 'Lot updated');
-      context.pop();
+      if (_e == null) {
+        await _last.save({'negotiator_id': _negotiator?.id, 'negotiator_name': _negotiator?.name});
+      }
+      if (!mounted) return;
+      if (_e != null || !another) {
+        context.toast(_e == null ? 'Lot saved' : 'Lot updated');
+        context.pop();
+        return;
+      }
+      setState(() {
+        _grade = null;
+        _buyer = null;
+        _lookedUp = null;
+        for (final c in [_invoice, _pkgs, _net, _incoming, _max, _neg, _pencil, _remarks]) {
+          c.clear();
+        }
+        _x.flags['holder_status'] = false;
+      });
+      context.toast('Lot saved. Enter the next invoice.');
+      _invoiceFocus.requestFocus();
     }
   }
 
@@ -235,12 +290,20 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
         GroupedSection(
           label: 'Lot',
           children: [
-            FieldInput(label: 'Garden or mark', hint: 'Assam Valley', controller: _garden, error: err('garden_name'), onChanged: (_) => setState(() {})),
-            FieldInput(label: 'Invoice number', hint: 'INV-BB-891', controller: _invoice, error: err('invoice_number'), onChanged: (_) => setState(() {})),
+            FieldInput(label: 'Garden or mark', hint: 'Assam Valley', controller: _garden, focusNode: _gardenFocus, error: err('garden_name'), onChanged: (_) => setState(() {})),
+            FieldInput(
+              label: 'Invoice number',
+              hint: 'INV-BB-891',
+              controller: _invoice,
+              focusNode: _invoiceFocus,
+              error: err('invoice_number'),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => _lookupOffer(auto: true),
+            ),
             LookupButton(
               label: 'Fill from offer list',
               busy: _looking,
-              onPressed: _garden.text.trim().isEmpty || _invoice.text.trim().isEmpty ? null : _lookupOffer,
+              onPressed: _garden.text.trim().isEmpty || _invoice.text.trim().isEmpty ? null : () => _lookupOffer(),
             ),
             GradePickerRow(value: _grade, onChanged: (g) => setState(() => _grade = g), error: err('grade')),
             Row(children: [
@@ -273,6 +336,12 @@ class _BidFormScreenState extends ConsumerState<BidFormScreen> with FormSubmit {
         ),
         ExtraFieldsSection(controller: _x, onChanged: () => setState(() {})),
         GroupedSection(children: [FieldInput(label: 'Remarks', hint: 'High quality orthodox lot', controller: _remarks, maxLines: 3)]),
+        if (_e == null)
+          SecondaryButton(
+            label: 'Save and add another',
+            icon: AppIcons.add,
+            onPressed: submitting ? null : () => _save(another: true),
+          ),
       ],
     );
   }

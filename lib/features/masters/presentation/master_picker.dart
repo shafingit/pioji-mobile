@@ -331,7 +331,20 @@ class _CreatableSheetState extends ConsumerState<_CreatableSheet> {
 
 /// Grade picker from `GET /grades`, falling back to the built-in list.
 class GradePickerRow extends ConsumerWidget {
-  const GradePickerRow({super.key, required this.value, required this.onChanged, this.error, this.label = 'Grade', this.gardenId, this.prefix, this.invoiceType});
+  const GradePickerRow({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.error,
+    this.label = 'Grade',
+    this.gardenId,
+    this.prefix,
+    this.invoiceType,
+    this.needsGarden = false,
+  });
+
+  /// Locked until a garden is chosen, so the list is that garden's grades.
+  final bool needsGarden;
 
   final String? value;
 
@@ -350,6 +363,9 @@ class GradePickerRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (needsGarden && gardenId == null) {
+      return ValueRow(label: label, value: value, placeholder: 'Choose a garden first', error: error, showChevron: false);
+    }
     return ValueRow(
       label: label,
       value: value,
@@ -461,7 +477,12 @@ class InvoiceNumberRow extends ConsumerWidget {
     this.grade,
     this.onTypeChanged,
     this.onGradeChanged,
+    this.needsGarden = false,
   });
+
+  /// The prefix is locked until a garden is chosen, so its choices are that
+  /// garden's prefixes and types.
+  final bool needsGarden;
 
   final int? gardenId;
 
@@ -534,7 +555,15 @@ class InvoiceNumberRow extends ConsumerWidget {
       ...pairs.where((x) => gradeType != null && x.type == gradeType),
       ...pairs.where((x) => gradeType == null || x.type != gradeType),
     ];
-    final Widget prefixField = pairs.isEmpty
+    final Widget prefixField = needsGarden && gardenId == null
+        ? ValueRow(
+            label: showNumber ? 'Prefix' : 'Prefix · type',
+            value: typed.isEmpty ? null : typed,
+            placeholder: showNumber ? 'Garden first' : 'Choose a garden first',
+            error: prefixError,
+            showChevron: false,
+          )
+        : pairs.isEmpty
         ? FieldInput(label: 'Prefix', hint: prefixHint, controller: prefix, error: prefixError, textCapitalization: TextCapitalization.characters)
         : ValueRow(
             label: showNumber ? 'Prefix' : 'Prefix · type',

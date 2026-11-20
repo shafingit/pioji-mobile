@@ -119,6 +119,21 @@ class _SalesFormScreenState extends ConsumerState<SalesFormScreen> with FormSubm
   late MasterItem? _garden = J.integer(_e?.raw['garden_id']) == null ? null : MasterItem(J.integer(_e!.raw['garden_id'])!, _e.mark ?? '#${_e.raw['garden_id']}');
   bool _looking = false;
 
+  /// Mark and invoice last looked up; leaving the invoice field looks the
+  /// lot up by itself (new entries only).
+  String? _lookedUp;
+  final _invFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    if (_e == null) {
+      _invFocus.addListener(() {
+        if (!_invFocus.hasFocus) _lookupLot(auto: true);
+      });
+    }
+  }
+
   /// Picking a garden fills the mark and what the website fills from
   /// `garden-info`: incharge, category and location.
   Future<void> _setGarden(MasterItem? g) async {
@@ -139,14 +154,17 @@ class _SalesFormScreenState extends ConsumerState<SalesFormScreen> with FormSubm
 
   /// Fills the lot from its samples and offers, by mark and invoice
   /// (`lookup-lot`), like the website.
-  Future<void> _lookupLot() async {
-    if (_looking) return;
+  Future<void> _lookupLot({bool auto = false}) async {
+    final key = '${_mark.text.trim()}|${_inv.text.trim()}'.toUpperCase();
+    if (_looking || _mark.text.trim().isEmpty || _inv.text.trim().isEmpty) return;
+    if (auto && key == _lookedUp) return;
+    _lookedUp = key;
     setState(() => _looking = true);
     final lot = await ref.read(salesRepositoryProvider).lookupLot(_mark.text.trim(), _inv.text.trim());
     if (!mounted) return;
     setState(() => _looking = false);
     if (lot == null) {
-      context.toast('No lot found for this mark and invoice.');
+      if (!auto) context.toast('No lot found for this mark and invoice.');
       return;
     }
     final buyers = ref.read(buyersProvider).value ?? const <MasterItem>[];
@@ -174,6 +192,7 @@ class _SalesFormScreenState extends ConsumerState<SalesFormScreen> with FormSubm
 
   @override
   void dispose() {
+    _invFocus.dispose();
     _x.dispose();
     for (final c in [_rate, _mark, _prefix, _inv, _pkgs, _qty, _cn, _transport, _discount, _remarks, _incharge]) {
       c.dispose();
@@ -262,12 +281,22 @@ class _SalesFormScreenState extends ConsumerState<SalesFormScreen> with FormSubm
             FieldInput(label: 'Mark', hint: 'Assam Valley Mark', controller: _mark, error: err('mark'), onChanged: (_) => setState(() {})),
             Row(children: [
               SizedBox(width: 120, child: FieldInput(label: 'Prefix', hint: 'IVP', controller: _prefix, textCapitalization: TextCapitalization.characters)),
-              Expanded(child: FieldInput(label: 'Invoice no', hint: '9812', controller: _inv, error: err('invoice_no'), onChanged: (_) => setState(() {}))),
+              Expanded(
+                child: FieldInput(
+                  label: 'Invoice no',
+                  hint: '9812',
+                  controller: _inv,
+                  focusNode: _invFocus,
+                  error: err('invoice_no'),
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _lookupLot(auto: true),
+                ),
+              ),
             ]),
             LookupButton(
               label: 'Fill from lot',
               busy: _looking,
-              onPressed: _mark.text.trim().isEmpty || _inv.text.trim().isEmpty ? null : _lookupLot,
+              onPressed: _mark.text.trim().isEmpty || _inv.text.trim().isEmpty ? null : () => _lookupLot(),
             ),
             Row(children: [
               Expanded(child: FieldInput(label: 'Packages', hint: '25', controller: _pkgs, error: err('pkgs'), keyboardType: TextInputType.number, inputFormatters: digitsOnly)),
@@ -279,7 +308,7 @@ class _SalesFormScreenState extends ConsumerState<SalesFormScreen> with FormSubm
           label: 'Dispatch',
           children: [
             FieldInput(label: 'CN number', hint: 'CN-44129', controller: _cn),
-            DateRow(label: 'CN date', value: _cnDate, onChanged: (d) => setState(() => _cnDate = d)),
+            DateRow(label: 'CN date', value: _cnDate, placeholder: 'Not set', todayShortcut: true, onChanged: (d) => setState(() => _cnDate = d)),
             FieldInput(label: 'Transport', hint: 'V-Trans Logistics', controller: _transport),
           ],
         ),

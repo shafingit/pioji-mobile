@@ -113,7 +113,7 @@ class ExtraFieldsSection extends StatelessWidget {
     final c = controller;
     switch (f.kind) {
       case ExtraKind.date:
-        return DateRow(label: f.label, placeholder: 'Not set', value: c.dates[f.key], error: errors[f.key], onChanged: (d) {
+        return DateRow(label: f.label, placeholder: 'Not set', todayShortcut: true, value: c.dates[f.key], error: errors[f.key], onChanged: (d) {
           c.dates[f.key] = d;
           onChanged();
         });

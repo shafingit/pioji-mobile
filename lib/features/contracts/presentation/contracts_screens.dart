@@ -274,7 +274,12 @@ class _ContractFormScreenState extends ConsumerState<ContractFormScreen> with Fo
           ),
         Row(
           children: [
-            SecondaryButton(label: 'Add item', icon: AppIcons.add, onPressed: () => setState(() => _items.add(_ItemDraft()))),
+            SecondaryButton(
+              label: 'Add item',
+              icon: AppIcons.add,
+              // Items in one contract usually share a currency.
+              onPressed: () => setState(() => _items.add(_ItemDraft()..currency = _items.lastOrNull?.currency)),
+            ),
             const Spacer(),
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text(Fmt.money(value), style: AppText.headline),
