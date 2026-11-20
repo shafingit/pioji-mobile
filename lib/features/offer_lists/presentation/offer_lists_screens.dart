@@ -454,6 +454,7 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
               needsGarden: true,
             ),
             GradePickerRow(gardenId: _garden?.id, needsGarden: true, prefix: _prefix.text, invoiceType: _invoiceType, value: _grade, onChanged: _setGrade, error: err('grade')),
+            DateRow(label: 'Date', value: _date, onChanged: _setDate, error: err('date')),
           ],
         ),
         WeightFields(pkgs: _pkgs, nett: _nett, total: _total, errors: errors),
@@ -506,13 +507,6 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
               onPressed: () => setState(() => _parties.add(null)),
             ),
           ),
-        GroupedSection(
-          label: 'Dates and type',
-          children: [
-            DateRow(label: 'Date', value: _date, onChanged: _setDate, error: err('date')),
-            InvoiceTypeRow(value: _invoiceType, error: err('type'), onChanged: (v) => setState(() => _invoiceType = v)),
-          ],
-        ),
         ExtraFieldsSection(controller: _x, errors: errors, onChanged: () => setState(() {})),
         if (isNew)
           SecondaryButton(

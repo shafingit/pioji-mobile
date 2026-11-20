@@ -282,6 +282,46 @@ class Segmented<T> extends StatelessWidget {
   }
 }
 
+/// One-tap choices that wrap onto more lines when they don't fit, for
+/// lists too long for a [Segmented] control.
+class ChoiceChips<T> extends StatelessWidget {
+  const ChoiceChips({super.key, required this.options, required this.selected, required this.onSelected});
+
+  final Map<T, String> options;
+  final T? selected;
+  final ValueChanged<T> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final e in options.entries)
+          Semantics(
+            button: true,
+            selected: e.key == selected,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onSelected(e.key),
+              child: Container(
+                height: 34,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: ShapeDecoration(
+                  color: e.key == selected ? c.accentTint : c.fill,
+                  shape: StadiumBorder(side: e.key == selected ? BorderSide(color: c.accent) : BorderSide.none),
+                ),
+                // Sized to the label, not the row.
+                child: Center(widthFactor: 1, child: Text(e.value, style: AppText.footnote.copyWith(color: e.key == selected ? c.accent : c.textSecondary))),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// Opens a month calendar in a sheet. Returns null if dismissed.
 Future<DateTime?> pickDate(BuildContext context, {DateTime? initial, DateTime? minimum}) {
   return showModalBottomSheet<DateTime>(
