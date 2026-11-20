@@ -14,6 +14,7 @@ import '../../../core/utils/formatters.dart';
 import '../data/masters_repository.dart';
 import '../../../core/design/app_icons.dart';
 import '../../../core/widgets/controls.dart';
+import '../../../core/application/fresh_read.dart';
 
 /// Opens the full garden list to pick a mark (used by list filters):
 /// filters by `garden_id`, shows the garden name.
@@ -49,7 +50,7 @@ class _RemoteSearchSheetState extends ConsumerState<_RemoteSearchSheet> {
   @override
   void initState() {
     super.initState();
-    ref.read(widget.initial.future).then((v) {
+    ref.fresh(widget.initial).then((v) {
       if (!mounted) return;
       setState(() => (_all = v.isEmpty ? null : v, _results = v, _loading = false));
     });
@@ -177,7 +178,7 @@ class MasterPickerRow extends ConsumerWidget {
           if (picked != null) onChanged(picked);
           return;
         }
-        final items = await ref.read(provider.future);
+        final items = await ref.fresh(provider);
         if (!context.mounted) return;
         final creatable = _creatable[provider];
         if (items.isEmpty && creatable == null) {
@@ -330,7 +331,7 @@ class _CreatableSheetState extends ConsumerState<_CreatableSheet> {
 
 /// Grade picker from `GET /grades`, falling back to the built-in list.
 class GradePickerRow extends ConsumerWidget {
-  const GradePickerRow({super.key, required this.value, required this.onChanged, this.error, this.label = 'Grade', this.gardenId});
+  const GradePickerRow({super.key, required this.value, required this.onChanged, this.error, this.label = 'Grade', this.gardenId, this.prefix, this.invoiceType});
 
   final String? value;
 
@@ -341,6 +342,12 @@ class GradePickerRow extends ConsumerWidget {
   final String? error;
   final String label;
 
+  /// The invoice prefix and type already chosen: only grades of that type
+  /// are listed ("Show all grades" lists the rest), and the grades this
+  /// garden used before with the prefix come first.
+  final String? prefix;
+  final String? invoiceType;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ValueRow(
@@ -348,22 +355,48 @@ class GradePickerRow extends ConsumerWidget {
       value: value,
       error: error,
       onTap: () async {
-        final forGarden = gardenId == null ? const <GardenGrade>[] : (await ref.read(gardenOptionsProvider(gardenId!).future)).grades;
-        final grades = forGarden.isNotEmpty ? const <String>[] : await ref.read(gradesProvider.future);
+        var forGarden = gardenId == null ? const <GardenGrade>[] : (await ref.fresh(gardenOptionsProvider(gardenId!), isEmpty: (o) => o.grades.isEmpty)).grades;
+        var grades = forGarden.isNotEmpty ? const <String>[] : await ref.fresh(gradesProvider);
+        final links = await ref.fresh(typeLinksProvider, isEmpty: (l) => l.isEmpty);
+        final history = gardenId == null ? GardenHistory.empty : await ref.read(gardenHistoryProvider(gardenId!).future).catchError((_) => GardenHistory.empty);
+        final p = prefix?.trim() ?? '';
+        final type = (invoiceType ?? '').isEmpty ? null : invoiceType;
+
+        // Only grades of the chosen type (a grade's real type, from the grade
+        // master, else the garden's); without a type, the prefix's types.
+        bool fits(String code, [String? gardenType]) {
+          final t = links.effectiveTypes(code, gardenType);
+          if (type != null) return t.contains(type);
+          final pt = links.prefixTypes(p);
+          return p.isEmpty || pt.isEmpty || t.intersection(pt).isNotEmpty;
+        }
+
+        // Grades used here before with this prefix first, latest first.
+        final used = history.gradesFor(p);
+        int rank(String code) {
+          final i = used.indexOf(code.toUpperCase());
+          return i < 0 ? used.length : i;
+        }
+
+        final allGarden = [...forGarden]..sort((x, y) => rank(x.code).compareTo(rank(y.code)));
+        final allGrades = [...grades]..sort((x, y) => rank(x).compareTo(rank(y)));
+        forGarden = allGarden;
+        grades = allGrades;
+        var narrowed = false;
+        final g = allGarden.where((x) => fits(x.code, x.invoiceType)).toList();
+        final a = allGrades.where(fits).toList();
+        if ((g.length < allGarden.length || a.length < allGrades.length) && (g.isNotEmpty || a.isNotEmpty)) {
+          forGarden = g;
+          grades = a;
+          narrowed = true;
+        }
+        final title = !narrowed
+            ? null
+            : type != null
+                ? '${links.label(type)} grades'
+                : '$label for prefix $p';
         if (!context.mounted) return;
-        final picked = await showPickerSheet<String>(
-          context,
-          title: forGarden.isNotEmpty ? '$label for this garden' : label,
-          selected: value,
-          options: [
-            ...forGarden.isNotEmpty
-                ? [for (final g in forGarden) PickOption(g.code, g.code, subtitle: [if (g.name != g.code) g.name, ?g.invoiceType].join(' · '))]
-                : [for (final g in grades) PickOption(g, g)],
-            if (value != null && !forGarden.any((g) => g.code == value) && (forGarden.isNotEmpty || !grades.contains(value)))
-              PickOption(value!, value!, subtitle: 'Other'),
-            if (gardenId != null) const PickOption(_other, 'Other…', subtitle: 'A grade this garden has no set-up for'),
-          ],
-        );
+        final picked = await _pick(context, forGarden, grades, title, links, used, p);
         if (picked == _other) {
           if (!context.mounted) return;
           final typed = await askOther(context, title: 'Other grade', label: 'Grade', current: value);
@@ -372,6 +405,39 @@ class GradePickerRow extends ConsumerWidget {
           onChanged(picked);
         }
       },
+    );
+  }
+
+  Future<String?> _pick(
+    BuildContext context,
+    List<GardenGrade> forGarden,
+    List<String> grades,
+    String? title,
+    TypeLinks links,
+    List<String> used,
+    String prefix,
+  ) {
+    String? note(String code, [String? name, String? gardenType]) {
+      final t = links.effectiveTypes(code, gardenType);
+      return [
+        if (name != null && name != code) name,
+        if (t.isNotEmpty) t.map(links.label).join(' / '),
+        if (used.contains(code.toUpperCase())) 'used here with $prefix',
+      ].join(' · ');
+    }
+
+    return showPickerSheet<String>(
+      context,
+      title: title ?? (forGarden.isNotEmpty ? '$label for this garden' : label),
+      selected: value,
+      options: [
+        ...forGarden.isNotEmpty
+            ? [for (final g in forGarden) PickOption(g.code, g.code, subtitle: note(g.code, g.name, g.invoiceType))]
+            : [for (final g in grades) PickOption(g, g, subtitle: note(g))],
+        if (value != null && !forGarden.any((g) => g.code == value) && (forGarden.isNotEmpty || !grades.contains(value)))
+          PickOption(value!, value!, subtitle: 'Other'),
+        if (gardenId != null) const PickOption(_other, 'Other…', subtitle: 'A grade this garden has no set-up for'),
+      ],
     );
   }
 }
@@ -391,9 +457,15 @@ class InvoiceNumberRow extends ConsumerWidget {
     this.numberError,
     this.prefixHint = 'SMP',
     this.numberHint = '2048',
+    this.showNumber = true,
+    this.grade,
+    this.onTypeChanged,
+    this.onGradeChanged,
   });
 
   final int? gardenId;
+
+  /// The lot's invoice type; shown with the prefix ("D · Dust").
   final String? invoiceType;
   final TextEditingController prefix;
   final TextEditingController number;
@@ -403,41 +475,127 @@ class InvoiceNumberRow extends ConsumerWidget {
   final String prefixHint;
   final String numberHint;
 
+  /// False when the form shows the invoice number elsewhere (the offer form
+  /// asks for it first, to find the lot).
+  final bool showNumber;
+
+  /// The lot's grade: picks the prefix used for its invoice type, or the
+  /// one this garden last used with it.
+  final String? grade;
+
+  /// A prefix · type choice also sets the invoice type.
+  final ValueChanged<String>? onTypeChanged;
+
+  /// After a prefix · type choice, when the grade doesn't fit the new type
+  /// (or there is none yet): the grade this garden has always used with that
+  /// prefix and type when there is only one, otherwise null to clear it.
+  final ValueChanged<String?>? onGradeChanged;
+
+  /// The prefix this row filled in itself, per controller, so a later grade
+  /// can replace it while a prefix the user chose is kept.
+  static final _auto = Expando<String>();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final options = gardenId == null ? GardenOptions.empty : ref.watch(gardenOptionsProvider(gardenId!)).value ?? GardenOptions.empty;
-    final prefixes = options.prefixesFor(invoiceType);
+    final links = ref.watch(typeLinksProvider).value ?? TypeLinks.empty;
+    final history = gardenId == null ? GardenHistory.empty : ref.watch(gardenHistoryProvider(gardenId!)).value ?? GardenHistory.empty;
+    // Only prefix · type pairs this garden has grades of that type for, and
+    // with a grade chosen, only the ones of its type.
+    final gardenTypes = {for (final g in options.grades) ...links.effectiveTypes(g.code, g.invoiceType)};
+    final all = links.pairs(options.prefixes);
+    final withGrades = gardenTypes.isEmpty ? all : all.where((x) => gardenTypes.contains(x.type)).toList();
+    final ofGrade = (grade ?? '').isEmpty
+        ? withGrades
+        : withGrades.where((x) => links.effectiveTypes(grade!, options.grade(grade)?.invoiceType).contains(x.type)).toList();
+    final pairs = ofGrade.isNotEmpty ? ofGrade : withGrades;
+    final garden = options.prefixesFor(invoiceType);
+    final suggested = suggestPrefix(prefixes: garden, grade: grade, links: links, recent: history.prefixByGrade);
     final typed = prefix.text.trim();
-    final Widget prefixField = prefixes.isEmpty
+    final auto = _auto[prefix];
+    final untouched = typed.isEmpty || typed == auto;
+    if (suggested != null && untouched && typed != suggested) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final now = prefix.text.trim();
+        if (now.isNotEmpty && now != _auto[prefix]) return;
+        prefix.text = suggested;
+        _auto[prefix] = suggested;
+        // The grade's own type, when the prefix is used for it.
+        final t = links.gradeType(grade);
+        if (t != null && pairs.any((x) => x.prefix == suggested && x.type == t)) onTypeChanged?.call(t);
+        onChanged();
+      });
+    }
+
+    // Shown as "D · Dust" when the type is one this prefix stands for.
+    final shownType = pairs.any((x) => x.prefix == typed && x.type == invoiceType) ? invoiceType : null;
+    final gradeType = links.gradeType(grade);
+    final ordered = [
+      ...pairs.where((x) => gradeType != null && x.type == gradeType),
+      ...pairs.where((x) => gradeType == null || x.type != gradeType),
+    ];
+    final Widget prefixField = pairs.isEmpty
         ? FieldInput(label: 'Prefix', hint: prefixHint, controller: prefix, error: prefixError, textCapitalization: TextCapitalization.characters)
         : ValueRow(
-            label: 'Prefix',
-            value: typed.isEmpty ? null : typed,
+            label: showNumber ? 'Prefix' : 'Prefix · type',
+            value: typed.isEmpty ? null : (shownType == null || !showNumber ? [typed, if (shownType != null) links.label(shownType)].join(' · ') : typed),
             error: prefixError,
             onTap: () async {
+              String key(({String prefix, String type}) x) => '${x.prefix}\u0001${x.type}';
+              // Grades this garden used with the prefix, of this row's type.
+              List<String> usedWith(({String prefix, String type}) x) =>
+                  history.gradesFor(x.prefix).where((g) => links.gradeTypes(g).isEmpty || links.gradeTypes(g).contains(x.type)).toList();
               final picked = await showPickerSheet<String>(
                 context,
-                title: 'Invoice prefix',
-                selected: typed,
-                searchable: prefixes.length > 8,
+                title: 'Invoice prefix and type',
+                selected: shownType == null ? null : '$typed\u0001$shownType',
+                searchable: ordered.length > 8,
                 options: [
-                  for (final p in prefixes) PickOption(p, p),
-                  if (typed.isNotEmpty && !prefixes.contains(typed)) PickOption(typed, typed, subtitle: 'Other'),
+                  for (final x in ordered)
+                    PickOption(
+                      key(x),
+                      '${x.prefix} · ${links.label(x.type)}',
+                      subtitle: x.prefix == suggested && x.type == gradeType && (grade ?? '').isNotEmpty
+                          ? 'Suggested for $grade'
+                          : usedWith(x).isEmpty
+                              ? null
+                              : 'Used here with ${usedWith(x).take(3).join(', ')}',
+                    ),
+                  if (typed.isNotEmpty && !pairs.any((x) => x.prefix == typed)) PickOption(typed, typed, subtitle: 'Other'),
                   const PickOption(_other, 'Other…', subtitle: 'A prefix this garden has no set-up for'),
                 ],
               );
+              if (picked == null) return;
               if (picked == _other) {
                 if (!context.mounted) return;
                 final other = await askOther(context, title: 'Other prefix', label: 'Prefix', current: typed);
                 if (other == null) return;
                 prefix.text = other;
+                _auto[prefix] = null;
                 onChanged();
-              } else if (picked != null) {
-                prefix.text = picked;
-                onChanged();
+                return;
               }
+              final parts = picked.split('\u0001');
+              prefix.text = parts.first;
+              _auto[prefix] = null;
+              if (parts.length > 1) {
+                final type = parts[1];
+                onTypeChanged?.call(type);
+                // A grade of another type no longer fits: use the one grade
+                // this garden has used with this prefix and type, or clear it.
+                final current = grade ?? '';
+                final known = links.gradeTypes(current);
+                final fits = current.isNotEmpty && (known.isEmpty || known.contains(type));
+                if (!fits) {
+                  final used = history.gradesFor(parts.first).where((g) => links.gradeTypes(g).isEmpty || links.gradeTypes(g).contains(type)).toList();
+                  final next = used.length == 1 ? used.single : null;
+                  if (next != null || current.isNotEmpty) onGradeChanged?.call(next);
+                }
+              }
+              onChanged();
             },
           );
+    if (!showNumber) return prefixField;
     return Row(children: [
       SizedBox(width: 120, child: prefixField),
       Expanded(child: FieldInput(label: 'Invoice no', hint: numberHint, controller: number, error: numberError)),
@@ -627,7 +785,7 @@ class InvoiceTypeRow extends ConsumerWidget {
       placeholder: 'Not set',
       error: error,
       onTap: () async {
-        final list = await ref.read(invoiceTypesProvider.future);
+        final list = await ref.fresh(invoiceTypesProvider);
         if (!context.mounted || list.isEmpty) return;
         final picked = await showPickerSheet<String>(
           context,

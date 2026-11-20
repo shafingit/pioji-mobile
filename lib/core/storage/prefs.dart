@@ -40,3 +40,23 @@ class ThemeModeSetting extends Notifier<ThemeMode> {
 }
 
 final themeModeProvider = NotifierProvider<ThemeModeSetting, ThemeMode>(ThemeModeSetting.new);
+
+/// Choices a form remembers from the user's last save (an offer's "For",
+/// courier, prompt days…) to start the next one with. Kept on this phone.
+class LastUsed {
+  const LastUsed(this._prefs, this._form);
+  final SharedPreferences _prefs;
+  final String _form;
+
+  String? operator [](String key) => _prefs.getString('last.$_form.$key');
+
+  Future<void> save(Map<String, Object?> values) async {
+    for (final e in values.entries) {
+      final v = e.value?.toString().trim();
+      if (v == null || v.isEmpty) continue;
+      await _prefs.setString('last.$_form.${e.key}', v);
+    }
+  }
+}
+
+final lastUsedProvider = Provider.family<LastUsed, String>((ref, form) => LastUsed(ref.read(sharedPrefsProvider), form));

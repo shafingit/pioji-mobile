@@ -6,6 +6,9 @@ import '../../../core/utils/json.dart';
 import '../../../core/widgets/fields.dart';
 import '../../../core/widgets/sheets.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/application/fresh_read.dart';
+import '../../../core/design/context_ext.dart';
+import '../../../core/design/typography.dart';
 
 /// One option of a website dropdown, as `GET /form-options` sends it.
 class Choice {
@@ -43,6 +46,8 @@ class FormOptions {
 
   List<Choice> operator [](String list) => _lists[list] ?? const [];
 
+  bool get isEmpty => _lists.values.every((l) => l.isEmpty);
+
   /// The option's label, or the raw value when the list doesn't have it.
   String? label(String list, String? value) {
     if (value == null || value.isEmpty) return null;
@@ -75,6 +80,10 @@ final formOptionsProvider = FutureProvider<FormOptions>((ref) async {
   return data == null ? FormOptions.empty : FormOptions.fromJson(data);
 });
 
+/// The lists for a picker that is opening, fetched again if the last load
+/// failed or was empty (offline).
+Future<FormOptions> readFormOptions(WidgetRef ref) => ref.fresh(formOptionsProvider, isEmpty: (o) => o.isEmpty);
+
 /// The loaded lists, or [FormOptions.empty] while they load.
 FormOptions watchFormOptions(WidgetRef ref) => ref.watch(formOptionsProvider).value ?? FormOptions.empty;
 
@@ -106,7 +115,7 @@ class OptionRow extends ConsumerWidget {
       placeholder: placeholder,
       error: error,
       onTap: () async {
-        final all = await ref.read(formOptionsProvider.future);
+        final all = await readFormOptions(ref);
         if (!context.mounted) return;
         final picked = await showPickerSheet<String>(
           context,
@@ -142,6 +151,45 @@ class OptionSegments extends ConsumerWidget {
       selected: options.containsKey(value) ? value! : watchFormOptions(ref).initial(list)!,
       onChanged: onChanged,
       compact: compact,
+    );
+  }
+}
+
+/// A labelled one-tap choice for a short `GET /form-options` list (up to
+/// about five options), so nothing needs a picker sheet. Labels drop their
+/// bracketed note: "OFR (Open Offer)" shows as "OFR".
+class OptionChipsRow extends ConsumerWidget {
+  const OptionChipsRow({super.key, required this.label, required this.list, required this.value, required this.onChanged, this.error});
+
+  final String label;
+  final String list;
+  final String? value;
+  final ValueChanged<String> onChanged;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final choices = watchFormOptions(ref)[list];
+    if (choices.isEmpty) return const SizedBox.shrink();
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label, style: AppText.body.copyWith(color: error != null ? c.danger : c.textPrimary)),
+          const SizedBox(height: 8),
+          Segmented<String?>(
+            options: {for (final o in choices) o.value: o.label.split(' (').first.trim()},
+            selected: value,
+            onChanged: (v) => onChanged(v!),
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 3),
+            Text(error!, style: AppText.footnote.copyWith(color: c.danger)),
+          ],
+        ],
+      ),
     );
   }
 }

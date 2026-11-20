@@ -49,6 +49,9 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
   late MasterItem? _garden =
       _e?.gardenId == null ? null : MasterItem(_e!.gardenId!, _e.gardenName ?? '#${_e.gardenId}');
   late String? _grade = _e?.grade;
+
+  /// The invoice type picked with the prefix ("D · Dust"); narrows grades.
+  String? _lotType;
   late String? _type = _e?.sampleType?.toLowerCase();
   late String? _forCompany = _e?.forCompany;
   late MasterItem? _party = _e?.partyId == null ? null : MasterItem(_e!.partyId!, _e.partyName ?? '#${_e.partyId}');
@@ -93,6 +96,7 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
   void _setGarden(MasterItem? g) => setState(() {
         if (g?.id != _garden?.id) {
           _grade = null;
+          _lotType = null;
           _prefix.clear();
         }
         _garden = g;
@@ -205,16 +209,27 @@ class _SampleFormScreenState extends ConsumerState<SampleFormScreen> with FormSu
             else
               InfoRow('Arrival date', '${Fmt.day(_arrival)} · locked'),
             MasterPickerRow(label: 'Garden', provider: gardensProvider, searchPath: '/gardens', value: _garden, onChanged: _setGarden, error: err('garden_id')),
-            GradePickerRow(gardenId: _garden?.id, value: _grade, onChanged: (g) => setState(() => _grade = g), error: err('grade')),
             InvoiceNumberRow(
               gardenId: _garden?.id,
-              invoiceType: _gardenGrade?.invoiceType,
+              invoiceType: _lotType ?? (ref.watch(typeLinksProvider).value ?? TypeLinks.empty).gradeType(_grade) ?? _gardenGrade?.invoiceType,
+              grade: _grade,
               prefix: _prefix,
               number: _inv,
+              showNumber: false,
               onChanged: () => setState(() {}),
+              onTypeChanged: (t) => setState(() => _lotType = t),
+              onGradeChanged: (g) => setState(() => _grade = g),
               prefixError: err('invoice_prefix'),
-              numberError: err('inv_no'),
             ),
+            GradePickerRow(
+              gardenId: _garden?.id,
+              prefix: _prefix.text,
+              invoiceType: _lotType,
+              value: _grade,
+              onChanged: (g) => setState(() => _grade = g),
+              error: err('grade'),
+            ),
+            FieldInput(label: 'Invoice no', hint: '2048', controller: _inv, error: err('inv_no')),
           ],
         ),
         WeightFields(

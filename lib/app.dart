@@ -3,15 +3,21 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/connectivity/connectivity_provider.dart';
 import 'core/design/theme.dart';
 import 'core/router/app_router.dart';
 import 'core/storage/prefs.dart';
+import 'features/masters/data/lookup_refresh.dart';
 
 class TeaErpApp extends ConsumerWidget {
   const TeaErpApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Back online: load again any dropdown list that failed while offline.
+    ref.listen(isOnlineProvider, (prev, next) {
+      if (prev?.value == false && next.value == true) refreshFailedLookups(ref);
+    });
     return MaterialApp.router(
       title: 'Pioji',
       debugShowCheckedModeBanner: false,

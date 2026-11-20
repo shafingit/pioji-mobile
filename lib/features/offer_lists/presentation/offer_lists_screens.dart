@@ -27,6 +27,13 @@ import '../../../core/design/app_icons.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../core/widgets/extra_fields.dart';
 import '../../../core/utils/json.dart';
+import '../../../core/widgets/controls.dart';
+import '../../samples/domain/sample.dart';
+import '../../samples/data/samples_repository.dart';
+import '../../../core/network/dio_provider.dart';
+import '../../../core/errors/app_failure.dart';
+import '../../../core/list/list_query.dart';
+import '../../../core/storage/prefs.dart';
 
 class OfferListsScreen extends ConsumerWidget {
   const OfferListsScreen({super.key});
@@ -113,7 +120,7 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
   late String? _currency = J.str(widget.editing?.raw['currency']);
   late String? _courier = J.str(widget.editing?.raw['courier_name']);
   late final OfferList? _e = widget.editing;
-  late DateTime _date = _e?.date ?? DateTime.now();
+  late DateTime _date = _e?.date ?? DateUtils.dateOnly(DateTime.now());
   late DateTime? _packing = _e?.packingDate;
   late MasterItem? _garden = _e?.gardenId == null ? null : MasterItem(_e!.gardenId!, _e.gardenName ?? '#${_e.gardenId}');
   late String? _grade = _e?.grade;
@@ -125,13 +132,42 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
   late final _gross = TextEditingController(text: Fmt.editable(_e?.grossWeight));
   late final _price = TextEditingController(text: Fmt.editable(_e?.price));
   late final _prompt = TextEditingController(text: _e?.promptDays?.toString());
+  final _invFocus = FocusNode();
   /// The offer API has party_1 … party_10.
   static const _maxParties = 10;
   late final _parties = <String?>[...?_e?.parties, if (_e == null || _e.parties.isEmpty) null];
 
+  /// Lot lookup by invoice number (new offers only).
+  String? _lookedUp;
+  bool _finding = false;
+  String? _lotNote;
+  bool _offered = false;
+
+  late final _last = ref.read(lastUsedProvider('offer'));
+
+  @override
+  void initState() {
+    super.initState();
+    if (_e == null) {
+      // Start from the user's last offer; list date and year follow the date.
+      _for = _last['for'];
+      _ofrSas = _last['ofr_sas'];
+      _courier = _last['courier_name'];
+      _currency = _last['currency'];
+      _prompt.text = _last['prompt_days'] ?? '';
+      _x.text['center']!.text = _last['center'] ?? '';
+      _x.dates['list_date'] = _date;
+      _x.text['year']!.text = '${_date.year}';
+      _invFocus.addListener(() {
+        if (!_invFocus.hasFocus) _findLot();
+      });
+    }
+  }
+
   @override
   void dispose() {
     _x.dispose();
+    _invFocus.dispose();
     for (final c in [_prefix, _inv, _pkgs, _nett, _total, _gross, _price, _prompt]) {
       c.dispose();
     }
@@ -140,20 +176,126 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
 
   GardenGrade? get _gardenGrade => _garden == null ? null : ref.read(gardenOptionsProvider(_garden!.id)).value?.grade(_grade);
 
+  /// New offers default to the first "For" option the API lists (ALL).
+  /// (The build watches the option lists, so this updates once they load.)
+  String? get _forValue => _for ?? (_e == null ? ref.read(formOptionsProvider).value?.initial('offer_for') : null);
+
   /// A different garden has its own grades and prefixes, so those reset.
-  void _setGarden(MasterItem? g) => setState(() {
-        if (g?.id != _garden?.id) {
-          _grade = null;
-          _prefix.clear();
-        }
-        _garden = g;
-      });
+  void _setGarden(MasterItem? g) {
+    setState(() {
+      if (g?.id != _garden?.id) {
+        _grade = null;
+        _prefix.clear();
+        _lotNote = null;
+      }
+      _garden = g;
+    });
+    _checkOffered();
+  }
 
   /// The garden's grade sets the invoice type, as on the website.
   void _setGrade(String g) => setState(() {
         _grade = g;
-        _invoiceType = _gardenGrade?.invoiceType ?? _invoiceType;
+        _invoiceType = (ref.read(typeLinksProvider).value ?? TypeLinks.empty).gradeType(g) ?? _gardenGrade?.invoiceType ?? _invoiceType;
       });
+
+  /// The list date and year follow the offer date unless changed by hand.
+  void _setDate(DateTime d) => setState(() {
+        final old = _date;
+        if (_x.dates['list_date'] == null || DateUtils.isSameDay(_x.dates['list_date'], old)) _x.dates['list_date'] = d;
+        final year = _x.text['year']!;
+        if (year.text.trim().isEmpty || year.text.trim() == '${old.year}') year.text = '${d.year}';
+        _date = d;
+      });
+
+  /// Finds the sample with this invoice number and fills the lot from it:
+  /// garden, grade, prefix, type, weights and date of packing. Only empty
+  /// fields are filled.
+  Future<void> _findLot() async {
+    final inv = _inv.text.trim();
+    if (_e != null || inv.isEmpty || inv == _lookedUp) return;
+    _lookedUp = inv;
+    setState(() => _finding = true);
+    try {
+      final page = await ref.read(samplesRepositoryProvider).list(ListQuery(search: inv), perPage: 30);
+      final exact = page.items.where((s) => s.invoiceNo?.trim().toUpperCase() == inv.toUpperCase()).toList();
+      final inGarden = exact.where((s) => s.gardenId == _garden?.id).toList();
+      final candidates = inGarden.isNotEmpty ? inGarden : exact;
+      if (!mounted || _inv.text.trim() != inv) return;
+      Sample? pick;
+      if (candidates.length == 1) {
+        pick = candidates.single;
+      } else if (candidates.length > 1) {
+        final id = await showPickerSheet<int>(
+          context,
+          title: 'Which lot is $inv?',
+          searchable: false,
+          options: [
+            for (final s in candidates)
+              PickOption(
+                s.id,
+                [s.gardenName, s.grade].whereType<String>().join(' · '),
+                subtitle: [
+                  Fmt.invoice(s.invoicePrefix, s.invoiceNo),
+                  if (s.packages != null && s.weight != null) '${Fmt.editable(s.packages)} × ${Fmt.editable(s.weight)} kg',
+                  if (s.arrivalDate != null) Fmt.day(s.arrivalDate),
+                ].where((e) => e.isNotEmpty).join(' · '),
+              ),
+          ],
+        );
+        pick = candidates.where((s) => s.id == id).firstOrNull;
+      }
+      if (pick != null) await _fillFrom(pick);
+    } on AppFailure {
+      // No lookup offline; the fields are typed as usual.
+    } finally {
+      if (mounted) setState(() => _finding = false);
+    }
+    await _checkOffered();
+  }
+
+  Future<void> _fillFrom(Sample s) async {
+    if (s.gardenId == null) return;
+    if (s.gardenId != _garden?.id) {
+      // Don't mix lots: a grade picked for another garden stays as it is.
+      if ((_grade ?? '').isNotEmpty) return;
+      _garden = MasterItem(s.gardenId!, s.gardenName ?? '#${s.gardenId}');
+      _prefix.clear();
+      _invoiceType = null;
+    }
+    if ((_grade ?? '').isEmpty) _grade = s.grade;
+    if (_prefix.text.trim().isEmpty && (s.invoicePrefix ?? '').isNotEmpty) _prefix.text = s.invoicePrefix!;
+    void put(TextEditingController c, num? v) {
+      if (c.text.trim().isEmpty && v != null && v > 0) c.text = Fmt.editable(v);
+    }
+    put(_pkgs, s.packages);
+    put(_nett, s.weight);
+    put(_total, s.totalKgs);
+    put(_gross, J.dbl(s.raw['gross_weight']));
+    _packing ??= J.date(s.raw['d_o_packing']);
+    final options = await ref.read(gardenOptionsProvider(s.gardenId!).future).catchError((_) => GardenOptions.empty);
+    if (!mounted) return;
+    setState(() {
+      _invoiceType ??= (ref.read(typeLinksProvider).value ?? TypeLinks.empty).gradeType(_grade) ?? options.grade(_grade)?.invoiceType;
+      _lotNote = 'Filled from sample ${J.str(s.raw['sample_id']) ?? ''}. Check the values.';
+    });
+  }
+
+  /// Warns before saving when this garden and invoice were already offered.
+  Future<void> _checkOffered() async {
+    final inv = _inv.text.trim();
+    final garden = _garden?.name;
+    if (_e != null || inv.isEmpty || garden == null || garden.startsWith('#')) {
+      if (_offered) setState(() => _offered = false);
+      return;
+    }
+    try {
+      final hit = await ref.read(apiProvider).lookup('/bid-book/search-offer-list', query: {'garden_name': garden, 'invoice_number': inv});
+      if (mounted && _inv.text.trim() == inv) setState(() => _offered = hit != null);
+    } on AppFailure {
+      // Saving still asks what to do with a duplicate.
+    }
+  }
 
   Map<String, Object?> _body([String? duplicateAction]) => {
         'date': Fmt.api(_date),
@@ -173,7 +315,7 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
         'type': _invoiceType,
         'price': Fmt.parse(_price.text),
         'currency': _currency ?? ref.read(formOptionsProvider).value?.initial('currencies'),
-        'for': _for,
+        'for': _forValue,
         'ofr_sas': _ofrSas,
         'courier_name': _courier,
         'prompt_days': int.tryParse(_prompt.text),
@@ -181,7 +323,9 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
         if (_e == null) 'duplicate_action': duplicateAction,
       };
 
-  Future<void> _save() async {
+  /// [another]: keep the date, garden and offer terms and clear the lot,
+  /// ready for the next invoice.
+  Future<void> _save({bool another = false}) async {
     final repo = ref.read(offerListsRepositoryProvider);
     final ok = await submit<bool>(
       () async {
@@ -210,51 +354,112 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
         });
       },
     );
-    if (ok == true && mounted) {
-      ref.invalidate(offerListsListProvider);
-      refreshSummaries(ref);
-      context.toast(_e == null ? 'Offer saved' : 'Offer updated');
-      if (_e == null) {
-        context.pop();
-      } else {
-        context.goNamed(Routes.offers);
-      }
+    if (ok != true || !mounted) return;
+    ref.invalidate(offerListsListProvider);
+    refreshSummaries(ref);
+    if (_e != null) {
+      context.toast('Offer updated');
+      context.goNamed(Routes.offers);
+      return;
     }
+    await _last.save({
+      'for': _forValue,
+      'ofr_sas': _ofrSas,
+      'courier_name': _courier,
+      'currency': _currency,
+      'prompt_days': _prompt.text,
+      'center': _x.text['center']!.text,
+    });
+    if (!mounted) return;
+    if (!another) {
+      context.toast('Offer saved');
+      context.pop();
+      return;
+    }
+    setState(() {
+      _grade = null;
+      _invoiceType = null;
+      _packing = null;
+      for (final c in [_inv, _prefix, _pkgs, _nett, _total, _gross, _price]) {
+        c.clear();
+      }
+      _x.text['awr_no']!.clear();
+      _parties
+        ..clear()
+        ..add(null);
+      _lookedUp = null;
+      _lotNote = null;
+      _offered = false;
+    });
+    context.toast('Offer saved. Enter the next invoice.');
+    _invFocus.requestFocus();
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+    final isNew = _e == null;
     return FormScaffold(
-      title: _e == null ? 'New offer' : 'Edit offer',
-      submitLabel: _e == null ? 'Save offer' : 'Save changes',
+      title: isNew ? 'New offer' : 'Edit offer',
+      submitLabel: isNew ? 'Save offer' : 'Save changes',
       submitting: submitting,
       onSubmit: _save,
       children: [
         if (banner != null) FormBanner(banner!),
         GroupedSection(
           label: 'Lot',
+          footer: _offered
+              ? Text('This invoice is already offered. Saving will ask whether to override it or re-offer.', style: AppText.footnote.copyWith(color: c.warning))
+              : _lotNote == null
+                  ? (isNew ? const Text('Enter the invoice number first: the lot fills in from its sample.') : null)
+                  : Text(_lotNote!),
           children: [
-            DateRow(label: 'Date', value: _date, onChanged: (d) => setState(() => _date = d), error: err('date')),
+            FieldInput(
+              label: 'Invoice no',
+              hint: '1045',
+              controller: _inv,
+              focusNode: _invFocus,
+              error: err('inv_no'),
+              caption: _finding ? 'finding the lot…' : null,
+              trailing: _finding ? const Padding(padding: EdgeInsets.only(right: 14), child: AppSpinner(size: 16)) : null,
+              onSubmitted: (_) => _findLot(),
+              onChanged: (_) {
+                if (_offered || _lotNote != null) {
+                  setState(() {
+                    _offered = false;
+                    _lotNote = null;
+                  });
+                }
+              },
+            ),
             MasterPickerRow(label: 'Garden', provider: gardensProvider, searchPath: '/gardens', value: _garden, onChanged: _setGarden, error: err('garden_id')),
-            GradePickerRow(gardenId: _garden?.id, value: _grade, onChanged: _setGrade, error: err('grade')),
             InvoiceNumberRow(
               gardenId: _garden?.id,
               invoiceType: _invoiceType,
+              grade: _grade,
               prefix: _prefix,
               number: _inv,
+              showNumber: false,
               onChanged: () => setState(() {}),
+              onTypeChanged: (t) => setState(() => _invoiceType = t),
+              onGradeChanged: (g) {
+                if (g == null) {
+                  setState(() => _grade = null);
+                } else {
+                  _setGrade(g);
+                }
+              },
               prefixHint: 'IVP',
-              numberHint: '1045',
               prefixError: err('inv_prefix'),
-              numberError: err('inv_no'),
             ),
+            GradePickerRow(gardenId: _garden?.id, prefix: _prefix.text, invoiceType: _invoiceType, value: _grade, onChanged: _setGrade, error: err('grade')),
           ],
         ),
         WeightFields(pkgs: _pkgs, nett: _nett, total: _total, errors: errors),
         GroupedSection(
           children: [
             FieldInput(label: 'Gross weight', hint: '720', controller: _gross, suffix: 'kg', keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: decimalOnly),
-            DateRow(label: 'Date of packing', value: _packing, onChanged: (d) => setState(() => _packing = d)),
+            DateRow(label: 'Date of packing', value: _packing, placeholder: 'Not set', todayShortcut: true, onChanged: (d) => setState(() => _packing = d)),
           ],
         ),
         GroupedSection(
@@ -268,15 +473,11 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
         GroupedSection(
           label: 'Offer',
           children: [
-            OptionRow(label: 'For', list: 'offer_for', value: _for, placeholder: 'Not set', error: err('for'), onChanged: (v) => setState(() => _for = v)),
-            OptionRow(label: 'OFR / SAS', list: 'offer_ofr_sas', value: _ofrSas, placeholder: 'Not set', error: err('ofr_sas'), onChanged: (v) => setState(() => _ofrSas = v)),
+            OptionChipsRow(label: 'For', list: 'offer_for', value: _forValue, error: err('for'), onChanged: (v) => setState(() => _for = v)),
+            OptionChipsRow(label: 'OFR / SAS', list: 'offer_ofr_sas', value: _ofrSas, error: err('ofr_sas'), onChanged: (v) => setState(() => _ofrSas = v)),
             OptionRow(label: 'Courier', list: 'courier_companies', value: _courier, placeholder: 'Not set', error: err('courier_name'), onChanged: (v) => setState(() => _courier = v)),
           ],
         ),
-        ExtraFieldsSection(controller: _x, errors: errors, onChanged: () => setState(() {})),
-        GroupedSection(children: [
-          InvoiceTypeRow(value: _invoiceType, error: err('type'), onChanged: (v) => setState(() => _invoiceType = v)),
-        ]),
         GroupedSection(
           label: 'Parties',
           footer: const Text('Pick a buyer or type any name. Up to $_maxParties.'),
@@ -303,6 +504,20 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
               icon: AppIcons.add,
               onPressed: () => setState(() => _parties.add(null)),
             ),
+          ),
+        GroupedSection(
+          label: 'Dates and type',
+          children: [
+            DateRow(label: 'Date', value: _date, onChanged: _setDate, error: err('date')),
+            InvoiceTypeRow(value: _invoiceType, error: err('type'), onChanged: (v) => setState(() => _invoiceType = v)),
+          ],
+        ),
+        ExtraFieldsSection(controller: _x, errors: errors, onChanged: () => setState(() {})),
+        if (isNew)
+          SecondaryButton(
+            label: 'Save and add another',
+            icon: AppIcons.add,
+            onPressed: submitting ? null : () => _save(another: true),
           ),
       ],
     );

@@ -133,6 +133,7 @@ class ValueRow extends StatelessWidget {
     this.error,
     this.showChevron = true,
     this.valueColor,
+    this.action,
   });
 
   final String label;
@@ -142,6 +143,9 @@ class ValueRow extends StatelessWidget {
   final String? error;
   final bool showChevron;
   final Color? valueColor;
+
+  /// A small shortcut shown instead of the placeholder, e.g. "Today".
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -165,6 +169,11 @@ class ValueRow extends StatelessWidget {
                   children: [
                     Text(label, style: AppText.body.copyWith(color: error != null ? c.danger : c.textPrimary)),
                     const SizedBox(width: AppSpace.md),
+                    if (value == null && action != null) ...[
+                      const Spacer(),
+                      // Keeps the row its usual height.
+                      SizedBox(height: 24, child: Center(child: action)),
+                    ] else
                     Expanded(
                       child: OneLineText(
                         value ?? placeholder,
@@ -422,7 +431,7 @@ class _NavButton extends StatelessWidget {
 
 /// Date row that opens [pickDate].
 class DateRow extends StatelessWidget {
-  const DateRow({super.key, required this.label, required this.value, required this.onChanged, this.minimum, this.error, this.placeholder = 'Select'});
+  const DateRow({super.key, required this.label, required this.value, required this.onChanged, this.minimum, this.error, this.placeholder = 'Select', this.todayShortcut = false});
 
   final String label;
   final DateTime? value;
@@ -431,6 +440,9 @@ class DateRow extends StatelessWidget {
   final String? error;
   final String placeholder;
 
+  /// While empty, shows a "Today" link that fills today in one tap.
+  final bool todayShortcut;
+
   @override
   Widget build(BuildContext context) {
     return ValueRow(
@@ -438,6 +450,7 @@ class DateRow extends StatelessWidget {
       value: value == null ? null : Fmt.day(value),
       placeholder: placeholder,
       error: error,
+      action: todayShortcut ? LinkButton(label: 'Today', onPressed: () => onChanged(DateUtils.dateOnly(DateTime.now()))) : null,
       onTap: () async {
         final d = await pickDate(context, initial: value, minimum: minimum);
         if (d != null) onChanged(d);

@@ -22,6 +22,7 @@ import '../../auth/domain/user.dart';
 import '../../masters/data/form_options.dart';
 import '../../masters/data/masters_repository.dart';
 import '../data/users_repository.dart';
+import '../../../core/application/fresh_read.dart';
 
 /// The role's label from the website's role list (`user_roles`), else
 /// from `GET /roles`, else what the API sent.
@@ -104,7 +105,7 @@ class _UserDetailScreenState extends ConsumerState<UserDetailScreen> {
   }
 
   Future<void> _changeRole(User u) async {
-    final options = await ref.read(formOptionsProvider.future);
+    final options = await readFormOptions(ref);
     if (!mounted) return;
     final picked = await showPickerSheet<String>(
       context,
@@ -279,7 +280,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> with FormSubmit
               placeholder: 'None',
               error: err('office_ids'),
               onTap: () async {
-                final all = await ref.read(formOptionsProvider.future);
+                final all = await readFormOptions(ref);
                 if (!context.mounted) return;
                 final sel = await showMultiPickerSheet<int>(
                   context,
@@ -295,7 +296,7 @@ class _UserFormScreenState extends ConsumerState<UserFormScreen> with FormSubmit
               value: _buyerIds.isEmpty ? null : '${_buyerIds.length} selected',
               placeholder: 'None',
               onTap: () async {
-                final list = await ref.read(buyersProvider.future);
+                final list = await ref.fresh(buyersProvider);
                 if (!context.mounted) return;
                 final sel = await showMultiPickerSheet<int>(
                   context,

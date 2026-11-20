@@ -27,6 +27,7 @@ import '../../masters/data/masters_repository.dart';
 import '../../masters/presentation/master_picker.dart';
 import '../data/courier_repository.dart';
 import '../../../core/design/app_icons.dart';
+import '../../../core/application/fresh_read.dart';
 
 
 class CourierListScreen extends ConsumerWidget {
@@ -156,8 +157,8 @@ class _CourierFormScreenState extends ConsumerState<CourierFormScreen> with Form
     // this entry already has.
     final buyerId = _toBuyer ? _buyer?.id : null;
     final items = buyerId == null
-        ? await ref.read(postingListsProvider.future)
-        : await ref.read(buyerPostingListsProvider(buyerId).future);
+        ? await ref.fresh(postingListsProvider)
+        : await ref.fresh(buyerPostingListsProvider(buyerId));
     if (!mounted) return;
     if (items.isEmpty) {
       context.toast(buyerId == null ? "Posting lists aren't available yet." : 'No pending posting lists for this buyer.');

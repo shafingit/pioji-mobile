@@ -152,7 +152,7 @@ class _SampleTastingSectionState extends ConsumerState<SampleTastingSection> {
   /// `POST /samples/bulk-mark` with a mode the user picks from
   /// `form-options` → `sample_bulk_mark_modes`.
   Future<void> _mark() async {
-    final options = await ref.read(formOptionsProvider.future);
+    final options = await readFormOptions(ref);
     if (!mounted) return;
     final mode = await showPickerSheet<String>(
       context,
@@ -179,7 +179,7 @@ class _SampleTastingSectionState extends ConsumerState<SampleTastingSection> {
   /// `form-options` → `sample_transfer_reasons`; the server makes a new
   /// sample from 10 g of it.
   Future<void> _retest() async {
-    final options = await ref.read(formOptionsProvider.future);
+    final options = await readFormOptions(ref);
     if (!mounted) return;
     final reason = await showPickerSheet<String>(
       context,
