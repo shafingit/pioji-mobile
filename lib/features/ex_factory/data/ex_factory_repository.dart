@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/storage/current_branch.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../../core/list/list_query.dart';
 import '../../../core/list/paged_notifier.dart';
@@ -149,6 +150,7 @@ final exFactoryListProvider = pagedProvider<ExFactoryBill>(
   (ref, q, page) => ref.read(exFactoryRepositoryProvider).list(q, page: page),
 );
 final exFactoryMetricsProvider = FutureProvider((ref) async {
+  ref.watch(currentBranchProvider);
   final options = await ref.watch(formOptionsProvider.future);
   return ref.read(exFactoryRepositoryProvider).metrics(options['ex_factory_register_statuses'].map((c) => c.value));
 });

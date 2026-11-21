@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/storage/current_branch.dart';
 import '../../../core/application/invalidation.dart';
 import '../../../core/list/list_query.dart';
 import '../../../core/network/dio_provider.dart';
@@ -57,28 +58,33 @@ class DashboardSummary {
 /// Each Home number loads and fails on its own, and reloads after any write.
 final dashboardProvider = FutureProvider<DashboardSummary>((ref) async {
   ref.watch(summaryRefreshProvider);
+  ref.watch(currentBranchProvider);
   return DashboardSummary.fromJson(J.map(await ref.read(apiProvider).getData('/dashboard/summary')) ?? const {});
 });
 
 final unbatchedTodayProvider = FutureProvider<int>((ref) async {
   ref.watch(summaryRefreshProvider);
+  ref.watch(currentBranchProvider);
   return (await ref.read(batchesRepositoryProvider).unbatched(_today)).length;
 });
 
 final awaitingBidsCountProvider = FutureProvider<int>((ref) async {
   ref.watch(summaryRefreshProvider);
+  ref.watch(currentBranchProvider);
   final repo = ref.read(bidBookRepositoryProvider);
   return (await repo.list(const ListQuery(params: {'tab': 'awaiting_allocation'}))).total;
 });
 
 final unallocatedTodayProvider = FutureProvider<int>((ref) async {
   ref.watch(summaryRefreshProvider);
+  ref.watch(currentBranchProvider);
   final d = await ref.read(allocationRepositoryProvider).load(_today);
   return [...d.offers, ...d.samples].where((i) => i.buyers.isEmpty).length;
 });
 
 final recentSamplesProvider = FutureProvider<List<Sample>>((ref) async {
   ref.watch(summaryRefreshProvider);
+  ref.watch(currentBranchProvider);
   return (await ref.read(samplesRepositoryProvider).list(const ListQuery(), perPage: 5)).items;
 });
 

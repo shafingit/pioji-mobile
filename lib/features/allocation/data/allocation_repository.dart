@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/storage/current_branch.dart';
 import '../../../core/network/api.dart';
 import '../../../core/network/dio_provider.dart';
 import '../../../core/utils/formatters.dart';
@@ -103,5 +104,8 @@ class AllocationRepository {
 
 final allocationRepositoryProvider = Provider((ref) => AllocationRepository(ref.watch(apiProvider)));
 final offeredTodayProvider = FutureProvider.family<OfferedToday, DateTime>(
-  (ref, date) => ref.read(allocationRepositoryProvider).load(date),
+  (ref, date) {
+    ref.watch(currentBranchProvider);
+    return ref.read(allocationRepositoryProvider).load(date);
+  },
 );

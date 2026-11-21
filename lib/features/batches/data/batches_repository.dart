@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/storage/current_branch.dart';
 import '../../../core/list/list_query.dart';
 import '../../../core/list/paged_notifier.dart';
 import '../../../core/network/api.dart';
@@ -111,5 +112,8 @@ final batchesListProvider = pagedProvider<Batch>(
 );
 
 final unbatchedProvider = FutureProvider.family<List<Sample>, DateTime>(
-  (ref, date) => ref.read(batchesRepositoryProvider).unbatched(date),
+  (ref, date) {
+    ref.watch(currentBranchProvider);
+    return ref.read(batchesRepositoryProvider).unbatched(date);
+  },
 );

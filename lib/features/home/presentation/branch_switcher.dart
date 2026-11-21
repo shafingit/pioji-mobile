@@ -8,7 +8,6 @@ import '../../../core/design/typography.dart';
 import '../../../core/storage/current_branch.dart';
 import '../../../core/widgets/sheets.dart';
 import '../../masters/data/form_options.dart';
-import '../application/home_providers.dart';
 
 /// Home's top-right branch name: tapping it switches the branch
 /// this phone works from, like the website's Switch Branch. The branches
@@ -44,8 +43,8 @@ class BranchSwitcher extends ConsumerWidget {
         ],
       );
       if (picked == null) return;
+      // Lists and Home numbers watch the branch and load again by themselves.
       await ref.read(currentBranchProvider.notifier).set(picked == _none ? null : int.tryParse(picked));
-      refreshHome(ref);
     }
 
     return Semantics(

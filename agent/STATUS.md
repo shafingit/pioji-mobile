@@ -80,7 +80,10 @@ The 10 client-feedback requests (12 Nov 2026) were all built by 17 Nov 2026 and 
    - filter list and dashboard reads by `branch_id` when it is sent, the same way the website filters by the selected branch (no `branch_id` = all branches);
    - set a branch on records already saved without one, e.g. offer list 5281.
 
-   21 Nov 2026: the first two are done (checked on offer lists and samples: a create keeps `branch_id`, and lists filter by `branch_id` or `X-Branch-Id`). Still open: records saved without a branch show in no branch's list.
+   21 Nov 2026: the first two are done. Checked with TEST records (deleted afterwards): offer lists, samples, batches, bid book, courier (JSON and with a photo), contracts, sales register and ex-factory all keep `branch_id`, and their lists and `GET /dashboard/summary` filter by it. Dropdown lists (buyers, sellers, gardens, grades, negotiators, posting lists, prefixes, users) are not filtered, which is right. An offer made in the app on Guwahati Office shows on the website's offer list. Still open:
+   - records saved without a branch show in no branch's list: offer list 5281 and samples such as 103 (SMP2026110051, SAILAJURI 2323, made 21 Nov 2026 by the admin account);
+   - the website's offer list showed every branch's offers (38) on 21 Nov 2026, where on 20 Nov it showed only the selected branch (29). Ask whether that is intended.
+8. Batches: a new batch on a date where a batch was deleted fails with a raw SQL error, "Duplicate entry '2026-12-31-1' for key 'sample_batches_batch_date_batch_sequence_unique'". Deleted batches seem to keep their date and sequence number. The next number should skip them (or the unique key should ignore deleted rows), and SQL must never reach the response.
 7. Offer tasting (21 Nov 2026): there is no offer route; the app marks offers with the marking sheet (`POST /samples/manual-marking`, rows `offer_list,<id>,1` under `item_type,item_ref,mark_for_tasting`). The server looks offers up within the sheet's `branch_id`, so the app sends each offer's own branch. Marking creates a sample from the offer (`related_sample`). `PUT /offer-lists/{id}` ignores `tasting_mark`, and marks made through the sheet get no `tasting_mark_updated_at`. A JSON route like `POST /samples/bulk-mark` for offers would be simpler.
 
 ## Not built yet (from the spec)

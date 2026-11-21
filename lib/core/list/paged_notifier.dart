@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../storage/current_branch.dart';
 import '../errors/app_failure.dart';
 import '../network/paginated.dart';
 import 'list_query.dart';
@@ -54,6 +55,8 @@ class PagedNotifier<T> extends AsyncNotifier<PagedState<T>> {
   @override
   Future<PagedState<T>> build() async {
     _query = ref.watch(queryProvider);
+    // Lists are kept per branch: switching branch loads the list again.
+    ref.watch(currentBranchProvider);
     final first = await fetch(ref, _query, 1);
     return PagedState(items: first.items, total: first.total, hasMore: first.hasMore);
   }
