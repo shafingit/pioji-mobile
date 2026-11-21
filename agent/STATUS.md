@@ -80,6 +80,9 @@ The 10 client-feedback requests (12 Nov 2026) were all built by 17 Nov 2026 and 
    - filter list and dashboard reads by `branch_id` when it is sent, the same way the website filters by the selected branch (no `branch_id` = all branches);
    - set a branch on records already saved without one, e.g. offer list 5281.
 
+   21 Nov 2026: the first two are done (checked on offer lists and samples: a create keeps `branch_id`, and lists filter by `branch_id` or `X-Branch-Id`). Still open: records saved without a branch show in no branch's list.
+7. Offer tasting (21 Nov 2026): there is no offer route; the app marks offers with the marking sheet (`POST /samples/manual-marking`, rows `offer_list,<id>,1` under `item_type,item_ref,mark_for_tasting`). The server looks offers up within the sheet's `branch_id`, so the app sends each offer's own branch. Marking creates a sample from the offer (`related_sample`). `PUT /offer-lists/{id}` ignores `tasting_mark`, and marks made through the sheet get no `tasting_mark_updated_at`. A JSON route like `POST /samples/bulk-mark` for offers would be simpler.
+
 ## Not built yet (from the spec)
 
 - Offline read cache (drift). Lists currently need a connection; the offline banner and write blocking are in place.

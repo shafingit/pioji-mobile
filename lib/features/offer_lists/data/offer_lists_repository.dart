@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/list/list_query.dart';
@@ -55,6 +56,9 @@ class OfferList {
 
   String get title => [gardenName ?? 'Garden #${gardenId ?? '–'}', ?grade].join(' · ');
 
+  /// Marked for tasting (`tasting_mark`).
+  bool get tastingMark => J.boolOr(raw['tasting_mark'], false);
+
   factory OfferList.fromJson(Map<String, dynamic> j) => OfferList(
         raw: j,
         id: J.intOr(j['id'], 0),
@@ -97,6 +101,29 @@ class OfferListsRepository {
 
   Future<void> create(Map<String, Object?> body) => _api.post('/offer-lists', cleanBody(body));
 
+  /// Marks [offers] for tasting. The API has no offer route for this, so
+  /// it sends the website's marking sheet
+  /// (`POST /samples/manual-marking`) with only the tasting column, which
+  /// leaves marking groups and direct allocation alone. The server looks
+  /// the offers up within the sheet's `branch_id`, so each branch's offers
+  /// go in their own sheet with that branch (empty for none).
+  Future<void> markForTasting(List<OfferList> offers) async {
+    final byBranch = <String, List<int>>{};
+    for (final o in offers) {
+      (byBranch[J.str(o.raw['branch_id']) ?? ''] ??= []).add(o.id);
+    }
+    for (final e in byBranch.entries) {
+      await _api.post('/samples/manual-marking', FormData.fromMap({
+        'branch_id': e.key,
+        'file': MultipartFile.fromString(
+          tastingSheet(e.value),
+          filename: 'tasting.csv',
+          contentType: DioMediaType('text', 'csv'),
+        ),
+      }));
+    }
+  }
+
   /// Parties left out of [body] are sent as null: the server clears a party
   /// only when it gets null, and keeps it when the key is missing.
   Future<void> update(int id, Map<String, Object?> body) => _api.put('/offer-lists/$id', {
@@ -112,3 +139,9 @@ final offerListsListProvider = pagedProvider<OfferList>(
   offerListsQueryProvider,
   (ref, q, page) => ref.read(offerListsRepositoryProvider).list(q, page: page),
 );
+
+/// The marking sheet that marks offers [ids] for tasting.
+String tastingSheet(List<int> ids) => [
+      'item_type,item_ref,mark_for_tasting',
+      for (final id in ids) 'offer_list,$id,1',
+    ].join('\n');

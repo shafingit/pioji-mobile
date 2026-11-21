@@ -18,6 +18,7 @@ import '../../../core/widgets/module_list.dart';
 import '../../../core/widgets/scaffolds.dart';
 import '../../../core/widgets/sheets.dart';
 import '../../../core/widgets/states.dart';
+import '../../../core/widgets/status_badge.dart';
 import '../../../core/widgets/weight_fields.dart';
 import '../../masters/data/form_options.dart';
 import '../../masters/data/masters_repository.dart';
@@ -85,6 +86,10 @@ class OfferListsScreen extends ConsumerWidget {
             if (o.price != null) ...[
               const SizedBox(height: 2),
               Text(Fmt.kg(o.totalKgs), style: AppText.footnote.copyWith(color: context.colors.textTertiary)),
+            ],
+            if (o.tastingMark) ...[
+              const SizedBox(height: 4),
+              const StatusBadge('Tasting', tone: Tone.accent),
             ],
           ],
         ),
@@ -534,6 +539,7 @@ class OfferDetailScreen extends ConsumerWidget {
         LinkButton(label: 'Edit', onPressed: () => context.pushNamed(Routes.offerEdit, pathParameters: {'id': '${o.id}'}, extra: o)),
       ],
       children: [
+        _OfferTastingSection(offer: o),
         GroupedSection(
           label: 'Lot',
           children: [
@@ -575,6 +581,66 @@ class OfferDetailScreen extends ConsumerWidget {
           onDelete: (ref) => ref.read(offerListsRepositoryProvider).delete(o.id),
           onDeleted: (ref) => ref.invalidate(offerListsListProvider),
         ),
+      ],
+    );
+  }
+}
+
+/// The offer's tasting status, with "Mark for tasting" while it isn't
+/// marked (see [OfferListsRepository.markForTasting]).
+class _OfferTastingSection extends ConsumerStatefulWidget {
+  const _OfferTastingSection({required this.offer});
+  final OfferList offer;
+
+  @override
+  ConsumerState<_OfferTastingSection> createState() => _OfferTastingSectionState();
+}
+
+class _OfferTastingSectionState extends ConsumerState<_OfferTastingSection> {
+  late bool _marked = widget.offer.tastingMark;
+  // The server dates marks made on the website only.
+  late final DateTime? _markedAt = J.date(widget.offer.raw['tasting_mark_updated_at']);
+  // Marking makes a sample from the offer (`related_sample`).
+  late String? _sample = _sampleId(widget.offer);
+  bool _busy = false;
+
+  static String? _sampleId(OfferList o) => J.str(J.map(o.raw['related_sample'])?['sample_id']);
+
+  Future<void> _mark() async {
+    setState(() => _busy = true);
+    try {
+      final repo = ref.read(offerListsRepositoryProvider);
+      await repo.markForTasting([widget.offer]);
+      ref.invalidate(offerListsListProvider);
+      ref.invalidate(samplesListProvider);
+      final fresh = await repo.get(widget.offer.id).then<OfferList?>((o) => o, onError: (_) => null);
+      if (!mounted) return;
+      setState(() {
+        _marked = true;
+        if (fresh != null) _sample = _sampleId(fresh);
+      });
+      context.toast(_sample == null ? 'Marked for tasting' : 'Marked for tasting · sample $_sample created');
+    } catch (e) {
+      if (mounted) context.toast(e is AppFailure ? e.message : 'Couldn’t mark it for tasting. Try again.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_marked) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 20),
+        child: SecondaryButton(label: _busy ? 'Marking…' : 'Mark for tasting', onPressed: _busy ? null : _mark),
+      );
+    }
+    return GroupedSection(
+      label: 'Tasting',
+      children: [
+        InfoRow('Status', 'Marked for tasting', valueColor: context.colors.accent),
+        if (_markedAt != null) InfoRow('Marked on', Fmt.day(_markedAt)),
+        if (_sample != null) InfoRow('Sample', _sample),
       ],
     );
   }
