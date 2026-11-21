@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/application/lookup_retry.dart';
 import '../../../core/list/list_query.dart';
 import '../../../core/list/paged_notifier.dart';
 import '../../../core/network/api.dart';
@@ -59,4 +60,4 @@ final usersListProvider = pagedProvider<User>(
   usersQueryProvider,
   (ref, q, page) => ref.read(usersRepositoryProvider).list(q, page: page),
 );
-final rolesProvider = FutureProvider((ref) => ref.read(usersRepositoryProvider).roles());
+final rolesProvider = FutureProvider((ref) => ref.read(usersRepositoryProvider).roles(), retry: lookupRetry);

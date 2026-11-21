@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/application/fresh_read.dart';
 import '../../../core/application/invalidation.dart';
 import '../../../core/design/context_ext.dart';
 import '../../../core/design/typography.dart';
@@ -56,6 +57,10 @@ class OfferListsScreen extends ConsumerWidget {
         LinkButton(label: 'Offered today', onPressed: () => context.pushNamed(Routes.offeredToday)),
         if (canCreate) AddButton(semanticLabel: 'New offer', onPressed: () => context.pushNamed(Routes.offerNew)),
       ],
+      beforeFilters: () async {
+        await ref.fresh(gradesProvider);
+        await ref.fresh(invoiceTypesProvider);
+      },
       filters: [
         const DateFilter('date_from', 'From'),
         const DateFilter('date_to', 'To'),
@@ -278,7 +283,7 @@ class _OfferFormScreenState extends ConsumerState<OfferFormScreen> with FormSubm
     put(_total, s.totalKgs);
     put(_gross, J.dbl(s.raw['gross_weight']));
     _packing ??= J.date(s.raw['d_o_packing']);
-    final options = await ref.read(gardenOptionsProvider(s.gardenId!).future).catchError((_) => GardenOptions.empty);
+    final options = await ref.fresh(gardenOptionsProvider(s.gardenId!), isEmpty: (o) => o.grades.isEmpty).catchError((_) => GardenOptions.empty);
     if (!mounted) return;
     setState(() {
       _invoiceType ??= (ref.read(typeLinksProvider).value ?? TypeLinks.empty).gradeType(_grade) ?? options.grade(_grade)?.invoiceType;

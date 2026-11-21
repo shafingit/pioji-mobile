@@ -9,11 +9,31 @@ import 'core/router/app_router.dart';
 import 'core/storage/prefs.dart';
 import 'features/masters/data/lookup_refresh.dart';
 
-class TeaErpApp extends ConsumerWidget {
+class TeaErpApp extends ConsumerStatefulWidget {
   const TeaErpApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TeaErpApp> createState() => _TeaErpAppState();
+}
+
+class _TeaErpAppState extends ConsumerState<TeaErpApp> {
+  // Back in the foreground: load again any dropdown list that failed.
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onResume: () => refreshFailedLookups(ref));
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Back online: load again any dropdown list that failed while offline.
     ref.listen(isOnlineProvider, (prev, next) {
       if (prev?.value == false && next.value == true) refreshFailedLookups(ref);

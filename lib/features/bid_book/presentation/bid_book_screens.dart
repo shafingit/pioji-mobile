@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/application/fresh_read.dart';
 import '../../../core/application/invalidation.dart';
 import '../../../core/design/context_ext.dart';
 import '../../../core/design/tokens.dart';
@@ -49,6 +50,7 @@ class BidBookScreen extends ConsumerWidget {
         AddButton(semanticLabel: 'New lot', onPressed: () => context.pushNamed(Routes.bidNew)),
       ],
       segments: SegmentConfig(param: 'tab', options: watchFormOptions(ref).map('bid_book_tabs')),
+      beforeFilters: () => ref.fresh(gradesProvider),
       filters: [
         ChoiceFilter('grade', 'Grade', {for (final g in ref.watch(gradesProvider).value ?? const <String>[]) g: g}),
         const PickerFilter('garden_id', 'Mark', pickMark),

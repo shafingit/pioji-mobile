@@ -72,6 +72,7 @@ class ModuleListScreen<T> extends ConsumerStatefulWidget {
     this.onNew,
     this.segments,
     this.filters = const [],
+    this.beforeFilters,
     this.actions = const [],
     this.header = const [],
     this.inTabs = true,
@@ -92,6 +93,10 @@ class ModuleListScreen<T> extends ConsumerStatefulWidget {
   final VoidCallback? onNew;
   final SegmentConfig? segments;
   final List<FilterConfig> filters;
+
+  /// Runs before the filter sheet opens, e.g. to load again a dropdown
+  /// list that failed, so [filters] has its options.
+  final Future<void> Function()? beforeFilters;
   final List<Widget> actions;
   final List<Widget> header;
   final bool inTabs;
@@ -357,6 +362,16 @@ class _ModuleListScreenState<T> extends ConsumerState<ModuleListScreen<T>> {
   }
 
   Future<void> _openFilters(BuildContext context) async {
+    if (widget.beforeFilters != null) {
+      try {
+        await widget.beforeFilters!();
+      } catch (_) {
+        // The sheet still opens; a list that can't load shows only "Any".
+      }
+      // Let the screen rebuild with the loaded options first.
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !context.mounted) return;
+    }
     final q = ref.read(widget.queryProvider);
     final ctl = ref.read(widget.queryProvider.notifier);
     await showModalBottomSheet<void>(

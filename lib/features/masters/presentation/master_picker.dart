@@ -374,7 +374,7 @@ class GradePickerRow extends ConsumerWidget {
         var forGarden = gardenId == null ? const <GardenGrade>[] : (await ref.fresh(gardenOptionsProvider(gardenId!), isEmpty: (o) => o.grades.isEmpty)).grades;
         var grades = forGarden.isNotEmpty ? const <String>[] : await ref.fresh(gradesProvider);
         final links = await ref.fresh(typeLinksProvider, isEmpty: (l) => l.isEmpty);
-        final history = gardenId == null ? GardenHistory.empty : await ref.read(gardenHistoryProvider(gardenId!).future).catchError((_) => GardenHistory.empty);
+        final history = gardenId == null ? GardenHistory.empty : await ref.fresh(gardenHistoryProvider(gardenId!)).catchError((_) => GardenHistory.empty);
         final p = prefix?.trim() ?? '';
         final type = (invoiceType ?? '').isEmpty ? null : invoiceType;
 

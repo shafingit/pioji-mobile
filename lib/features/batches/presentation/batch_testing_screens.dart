@@ -65,7 +65,13 @@ class _BatchActionsSectionState extends ConsumerState<BatchActionsSection> {
 
   /// Testers are the points of contact (`form-options` → `pocs`).
   Future<void> _start() async {
-    final options = await ref.read(formOptionsProvider.future);
+    final FormOptions options;
+    try {
+      options = await readFormOptions(ref);
+    } catch (e) {
+      if (mounted) context.toast(e is AppFailure ? e.message : "Couldn't load the testers. Try again.");
+      return;
+    }
     if (!mounted) return;
     final pocs = options['pocs'];
     final picked = await showMultiPickerSheet<int>(

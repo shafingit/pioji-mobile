@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/application/lookup_retry.dart';
 import '../../../core/network/dio_provider.dart';
 import '../../../core/utils/json.dart';
 import '../../../core/widgets/fields.dart';
@@ -78,7 +79,7 @@ class FormOptions {
 final formOptionsProvider = FutureProvider<FormOptions>((ref) async {
   final data = J.map(await ref.read(apiProvider).getData('/form-options'));
   return data == null ? FormOptions.empty : FormOptions.fromJson(data);
-});
+}, retry: lookupRetry);
 
 /// The lists for a picker that is opening, fetched again if the last load
 /// failed or was empty (offline).

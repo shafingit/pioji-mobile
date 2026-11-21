@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/application/fresh_read.dart';
 import '../../../core/application/invalidation.dart';
 import '../../../core/design/context_ext.dart';
 import '../../../core/design/typography.dart';
@@ -45,6 +46,7 @@ class SalesListScreen extends ConsumerWidget {
       onNew: () => context.pushNamed(Routes.salesNew),
       actions: [AddButton(semanticLabel: 'New sales entry', onPressed: () => context.pushNamed(Routes.salesNew))],
       segments: SegmentConfig(param: 'status', options: watchFormOptions(ref).map('sale_statuses', all: 'All')),
+      beforeFilters: () => ref.fresh(gradesProvider),
       filters: [
         const DateFilter('start_date', 'From'),
         const DateFilter('end_date', 'To'),
