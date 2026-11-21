@@ -39,7 +39,7 @@ class SamplesListScreen extends ConsumerWidget {
       segments: SegmentConfig(param: 'status', options: options.map('sample_statuses', all: 'All')),
       filters: [
         const DateFilter('arrival_date', 'Arrival'),
-        const PickerFilter('garden_id', 'Mark', pickMark),
+        const PickerFilter('garden_id', 'Garden', pickGarden),
         ChoiceFilter('for_company', 'For', options.map('offer_for')),
         ChoiceFilter('sample_type', 'Type', options.map('sample_types')),
         const ChoiceFilter('evaluation_status', 'Tasting', {'completed': 'Tasted'}),

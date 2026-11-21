@@ -16,14 +16,14 @@ import '../../../core/design/app_icons.dart';
 import '../../../core/widgets/controls.dart';
 import '../../../core/application/fresh_read.dart';
 
-/// Opens the full garden list to pick a mark (used by list filters):
+/// Opens the full garden list to pick a garden (used by list filters):
 /// filters by `garden_id`, shows the garden name.
-Future<({String value, String label})?> pickMark(BuildContext context) async {
+Future<({String value, String label})?> pickGarden(BuildContext context) async {
   final g = await showModalBottomSheet<MasterItem>(
     useSafeArea: true,
     context: context,
     isScrollControlled: true,
-    builder: (_) => _RemoteSearchSheet(title: 'Mark', path: '/gardens', initial: gardensProvider),
+    builder: (_) => _RemoteSearchSheet(title: 'Garden', path: '/gardens', initial: gardensProvider),
   );
   return g == null ? null : (value: '${g.id}', label: g.name);
 }

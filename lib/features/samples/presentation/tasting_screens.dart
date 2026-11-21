@@ -334,11 +334,11 @@ class _TastingReportScreenState extends ConsumerState<TastingReportScreen> {
             DateRow(label: 'From', placeholder: 'Any', value: _from, onChanged: (d) => setState(() => (_from = d, _future = _load()))),
             DateRow(label: 'To', placeholder: 'Any', value: _to, onChanged: (d) => setState(() => (_to = d, _future = _load()))),
             ValueRow(
-              label: 'Mark',
+              label: 'Garden',
               value: _mark?.label,
               placeholder: 'Any',
               onTap: () async {
-                final m = await pickMark(context);
+                final m = await pickGarden(context);
                 if (m != null) setState(() => (_mark = m, _future = _load()));
               },
             ),

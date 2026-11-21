@@ -53,9 +53,9 @@ class BidBookScreen extends ConsumerWidget {
       beforeFilters: () => ref.fresh(gradesProvider),
       filters: [
         ChoiceFilter('grade', 'Grade', {for (final g in ref.watch(gradesProvider).value ?? const <String>[]) g: g}),
-        const PickerFilter('garden_id', 'Mark', pickMark),
+        const PickerFilter('garden_id', 'Garden', pickGarden),
       ],
-      // All lots of one mark together, in invoice order.
+      // All lots of one garden together, in invoice order.
       grouping: ListGrouping(section: (b) => b.gardenName, order: (b) => b.invoiceNumber),
       itemBuilder: (context, b) => BidRow(bid: b),
     );

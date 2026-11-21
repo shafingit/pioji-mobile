@@ -67,7 +67,7 @@ class OfferListsScreen extends ConsumerWidget {
         ChoiceFilter('grade', 'Grade', {for (final g in ref.watch(gradesProvider).value ?? const <String>[]) g: g}),
         ChoiceFilter('type', 'Type', {for (final t in ref.watch(invoiceTypesProvider).value ?? const []) t.value: t.label}),
         ChoiceFilter('for', 'For', watchFormOptions(ref).map('offer_for')),
-        const PickerFilter('garden_id', 'Mark', pickMark),
+        const PickerFilter('garden_id', 'Garden', pickGarden),
       ],
       sortField: 'date',
       grouping: ListGrouping(

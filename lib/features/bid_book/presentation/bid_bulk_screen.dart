@@ -206,7 +206,7 @@ class _BidBulkScreenState extends ConsumerState<BidBulkScreen> with FormSubmit {
       GroupedSection(
         footer: const Text('All lots below are for this mark. Grade and invoice are needed; the rest can be filled later.'),
         children: [
-          MasterPickerRow(label: 'Mark', provider: gardensProvider, searchPath: '/gardens', value: _garden, onChanged: (g) => setState(() => _garden = g), error: err('garden_id')),
+          MasterPickerRow(label: 'Garden', provider: gardensProvider, searchPath: '/gardens', value: _garden, onChanged: (g) => setState(() => _garden = g), error: err('garden_id')),
         ],
       ),
       if (err('lots') != null) Text(err('lots')!, style: AppText.footnote.copyWith(color: c.danger)),
